@@ -26,6 +26,35 @@ import { processDocumentBase64 } from '../src/utils/gemini-parser';
 
 /* ─── constants ─── */
 const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
+const UNSPLASH_APP_NAME = 'tatra_shared_spaces';
+const UNSPLASH_ACCESS_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || '';
+const ROOM_COVER_STORAGE_KEY = 'tatra-room-cover-map-v1';
+const ROOM_COVER_FALLBACKS = [
+  {
+    id: 'tb-cover-1',
+    url: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&h=900&q=80',
+    author: 'Timon Studler',
+    authorUrl: `https://unsplash.com/@timonstudler?utm_source=${UNSPLASH_APP_NAME}&utm_medium=referral`,
+  },
+  {
+    id: 'tb-cover-2',
+    url: 'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&h=900&q=80',
+    author: 'Anders Jildén',
+    authorUrl: `https://unsplash.com/@andersjilden?utm_source=${UNSPLASH_APP_NAME}&utm_medium=referral`,
+  },
+  {
+    id: 'tb-cover-3',
+    url: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1600&h=900&q=80',
+    author: 'Luca Bravo',
+    authorUrl: `https://unsplash.com/@lucabravo?utm_source=${UNSPLASH_APP_NAME}&utm_medium=referral`,
+  },
+  {
+    id: 'tb-cover-4',
+    url: 'https://images.unsplash.com/photo-1505764706515-aa95265c5abc?auto=format&fit=crop&w=1600&h=900&q=80',
+    author: 'Jonatan Pie',
+    authorUrl: `https://unsplash.com/@r3dmax?utm_source=${UNSPLASH_APP_NAME}&utm_medium=referral`,
+  },
+];
 const sideItems = [
   'Prehľad',
   'Účty',
@@ -59,6 +88,94 @@ function formatAmount(n) {
 
 function getInitial(name) {
   return name ? name.charAt(0).toUpperCase() : '?';
+}
+
+function getUnsplashHomeUrl() {
+  return `https://unsplash.com/?utm_source=${UNSPLASH_APP_NAME}&utm_medium=referral`;
+}
+
+function hashString(value) {
+  return [...value].reduce((acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) | 0, 0);
+}
+
+function readRoomCoverMap() {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    return JSON.parse(window.localStorage.getItem(ROOM_COVER_STORAGE_KEY) || '{}');
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeRoomCoverMap(map) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ROOM_COVER_STORAGE_KEY, JSON.stringify(map));
+}
+
+function getFallbackRoomCover(roomIban) {
+  const index = Math.abs(hashString(roomIban)) % ROOM_COVER_FALLBACKS.length;
+  return ROOM_COVER_FALLBACKS[index];
+}
+
+async function fetchUnsplashRoomCover() {
+  if (!UNSPLASH_ACCESS_KEY || typeof fetch === 'undefined') return null;
+
+  const response = await fetch(
+    `https://api.unsplash.com/photos/random?query=${encodeURIComponent('landscape city travel architecture')}&orientation=landscape&content_filter=high`,
+    {
+      headers: {
+        Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Unsplash request failed: ${response.status}`);
+  }
+
+  const photo = await response.json();
+
+  if (!photo?.urls?.regular || !photo?.user?.name) {
+    return null;
+  }
+
+  const profileUrl = `${photo.user.links.html}${photo.user.links.html.includes('?') ? '&' : '?'}utm_source=${UNSPLASH_APP_NAME}&utm_medium=referral`;
+
+  return {
+    id: photo.id,
+    url: `${photo.urls.regular}&q=80&fm=jpg&fit=crop&w=1600&h=900`,
+    author: photo.user.name,
+    authorUrl: profileUrl,
+  };
+}
+
+async function ensureRoomCover(roomIban) {
+  const storedMap = readRoomCoverMap();
+
+  if (storedMap[roomIban]?.url) {
+    return storedMap[roomIban];
+  }
+
+  let cover = null;
+
+  try {
+    cover = await fetchUnsplashRoomCover();
+  } catch (error) {
+    cover = null;
+  }
+
+  if (!cover) {
+    cover = getFallbackRoomCover(roomIban);
+  }
+
+  const nextMap = {
+    ...storedMap,
+    [roomIban]: cover,
+  };
+
+  writeRoomCoverMap(nextMap);
+  return cover;
 }
 
 /* ─── data loading ─── */
@@ -278,9 +395,9 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [tab, setTab] = useState('transactions');
   const [sending, setSending] = useState(false);
   const [sendAmount, setSendAmount] = useState('');
-  const [showSendForm, setShowSendForm] = useState(false);
   const [sendDirection, setSendDirection] = useState('to_room'); // 'to_room' or 'from_room'
   const [showAddMember, setShowAddMember] = useState(false);
+  const [coverPhoto, setCoverPhoto] = useState(null);
 
   const [showAddCheck, setShowAddCheck] = useState(false);
   const [checkLocation, setCheckLocation] = useState('');
@@ -355,7 +472,6 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
         await sendFromRoom(room.room_iban, currentUserIban, Number(sendAmount));
       }
       setSendAmount('');
-      setShowSendForm(false);
       await onRefresh();
     } catch (err) {
       console.error('Transaction failed:', err);
@@ -364,306 +480,433 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
     }
   };
 
+  useEffect(() => {
+    let active = true;
+
+    ensureRoomCover(room.room_iban).then((cover) => {
+      if (active) {
+        setCoverPhoto(cover);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [room.room_iban]);
+
+  const targetAmount = Number(room.targetAmount || 0);
+  const progress = targetAmount > 0 ? Math.max(0, Math.min((Number(room.balance || 0) / targetAmount) * 100, 100)) : 0;
+  const incompleteReminders = (room.reminders || []).filter((rem) => !rem.is_completed).length;
+  const latestTransactionDate = room.transactions?.[0]?.created_at;
+
+  const transactionRows = [...(room.transactions || [])]
+    .sort((a, b) => {
+      const aTs = a?.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTs = b?.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTs - aTs;
+    });
+
   return (
-    <div className="ss-detail">
-      <BackHeader title={room.name || `Room ${room.room_iban}`} onBack={onBack} />
+    <div className="ss-detail-page">
+      <div className="ss-detail-hero">
+        {coverPhoto?.url ? (
+          <div
+            className="ss-detail-hero-image"
+            style={{ backgroundImage: `url(${coverPhoto.url})` }}
+            aria-hidden="true"
+          />
+        ) : null}
+        <div className="ss-detail-hero-fade" aria-hidden="true" />
 
-      {/* summary bar */}
-      <div className="ss-summary-bar">
-        <div className="ss-summary-item">
-          <span className="ss-summary-label">Zostatok priestoru</span>
-          <strong className="ss-summary-value">
-            {formatAmount(room.balance)} EUR
-            {room.targetAmount && <span style={{ color: '#8e9095', fontWeight: 500, fontSize: 14 }}> / {formatAmount(room.targetAmount)} EUR</span>}
-          </strong>
-        </div>
-        <div className="ss-summary-divider" />
-        <div className="ss-summary-item">
-          <span className="ss-summary-label">Clenovia</span>
-          <strong className="ss-summary-value">{room.members.length}</strong>
-        </div>
-        <div className="ss-summary-divider" />
-        <div className="ss-summary-item">
-          <span className="ss-summary-label">Transakcie</span>
-          <strong className="ss-summary-value">{room.transactions.length}</strong>
-        </div>
-      </div>
+        <div className="ss-detail-hero-content">
+          <div className="ss-detail-header">
+            <div className="ss-detail-heading">
+              <div className="ss-detail-breadcrumb">
+                <button className="ss-back ss-back-inline" type="button" onClick={onBack}>
+                  ← Späť
+                </button>
+                <span className="ss-detail-iban-chip">{room.room_iban}</span>
+              </div>
+              <h1 className="ss-detail-title">{room.name || `Room ${room.room_iban}`}</h1>
+              <p className="ss-detail-subtitle">
+                Detail priestoru, platby, nákupy a pripomienky v rovnakom štýle ako zvyšok bank shellu.
+              </p>
+            </div>
 
-      {/* tabs */}
-      <div className="ss-tabs">
-        <button
-          type="button"
-          className={tab === 'transactions' ? 'is-active' : ''}
-          onClick={() => setTab('transactions')}
-        >
-          Transakcie
-        </button>
-        <button
-          type="button"
-          className={tab === 'members' ? 'is-active' : ''}
-          onClick={() => setTab('members')}
-        >
-          Clenovia
-        </button>
-        <button
-          type="button"
-          className={tab === 'shopping' ? 'is-active' : ''}
-          onClick={() => setTab('shopping')}
-        >
-          Nakupy
-        </button>
-        <button
-          type="button"
-          className={tab === 'reminders' ? 'is-active' : ''}
-          onClick={() => setTab('reminders')}
-        >
-          Pripomienky
-        </button>
-        <button
-          type="button"
-          className={tab === 'send' ? 'is-active' : ''}
-          onClick={() => setTab('send')}
-        >
-          Poslat platbu
-        </button>
-      </div>
+            <div className="ss-detail-actions">
+              <button className="ss-open-room" type="button" onClick={() => setShowAddMember(true)}>
+                Pozvať člena
+              </button>
+              <button className="ss-kpi-cta ss-detail-pay-btn" type="button" onClick={() => setTab('send')}>
+                Poslať platbu
+              </button>
+            </div>
+          </div>
 
-      {/* transactions tab */}
-      {tab === 'transactions' && (
-        <div className="ss-tab-panel">
-          {room.transactions.length === 0 && (
-            <div className="ss-empty">Ziadne transakcie v tomto priestore.</div>
-          )}
-          <div className="ss-expense-list">
-            {room.transactions.map((tx, i) => {
-              const isIncoming = tx.to_iban === room.room_iban;
-              const otherIban = isIncoming ? tx.from_iban : tx.to_iban;
-              const otherUser = users.find((u) => u.user_iban === otherIban);
-              const otherName = otherUser?.name || otherIban;
-
-              return (
-                <div className="ss-expense-row" key={tx.id || i}>
-                  <div className="ss-expense-main">
-                    <span className="ss-expense-desc">
-                      {isIncoming ? `${otherName} -- priestor` : `Priestor -- ${otherName}`}
-                    </span>
-                    <span className="ss-expense-meta">
-                      {isIncoming ? 'Prijem do priestoru' : 'Vydaj z priestoru'}
-                      {tx.created_at ? ` · ${new Date(tx.created_at).toLocaleDateString('sk-SK')}` : ''}
-                    </span>
+          <div className="ss-kpi-row ss-detail-kpi-row">
+            <div className="ss-kpi-card ss-detail-balance-card">
+              <span className="ss-kpi-label">ZOSTATOK PRIESTORU</span>
+              <strong className="ss-kpi-value">{formatAmount(room.balance)} EUR</strong>
+              {targetAmount > 0 ? (
+                <>
+                  <div className="ss-detail-progress-meta">
+                    <span>Cieľ {formatAmount(targetAmount)} EUR</span>
+                    <span>{Math.round(progress)}%</span>
                   </div>
-                  <div className="ss-expense-amount">
-                    <strong
-                      style={{
-                        color: isIncoming ? 'var(--tb-green, #00d39a)' : '#ff5b7a',
-                      }}
-                    >
+                  <div className="ss-detail-progress-bar" aria-hidden="true">
+                    <span style={{ width: `${Math.max(progress, 6)}%` }} />
+                  </div>
+                </>
+              ) : (
+                <span className="ss-detail-kpi-note">Bez nastaveného cieľa</span>
+              )}
+            </div>
+            <div className="ss-kpi-card">
+              <span className="ss-kpi-label">ČLENOVIA</span>
+              <strong className="ss-kpi-value">{room.members.length}</strong>
+              <span className="ss-detail-kpi-note">v tomto priestore</span>
+            </div>
+            <div className="ss-kpi-card">
+              <span className="ss-kpi-label">TRANSAKCIE</span>
+              <strong className="ss-kpi-value">{room.transactions.length}</strong>
+              <span className="ss-detail-kpi-note">
+                {latestTransactionDate ? `naposledy ${formatShortDate(latestTransactionDate)}` : 'bez aktivity'}
+              </span>
+            </div>
+            <div className="ss-kpi-card">
+              <span className="ss-kpi-label">PRIPOMIENKY / NÁKUPY</span>
+              <strong className="ss-kpi-value">
+                {incompleteReminders} / {(room.checks || []).length}
+              </strong>
+              <span className="ss-detail-kpi-note">otvorené / bloky</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="ss-table-panel ss-detail-main-panel">
+        <div className="ss-panel-toolbar ss-detail-toolbar">
+          <div className="ss-dashboard-tabs" role="tablist" aria-label="Prepínať detail priestoru">
+            <button
+              type="button"
+              className={tab === 'transactions' ? 'is-active' : ''}
+              onClick={() => setTab('transactions')}
+            >
+              Transakcie
+            </button>
+            <button
+              type="button"
+              className={tab === 'members' ? 'is-active' : ''}
+              onClick={() => setTab('members')}
+            >
+              Členovia
+            </button>
+            <button
+              type="button"
+              className={tab === 'shopping' ? 'is-active' : ''}
+              onClick={() => setTab('shopping')}
+            >
+              Nákupy
+            </button>
+            <button
+              type="button"
+              className={tab === 'reminders' ? 'is-active' : ''}
+              onClick={() => setTab('reminders')}
+            >
+              Pripomienky
+            </button>
+            <button
+              type="button"
+              className={tab === 'send' ? 'is-active' : ''}
+              onClick={() => setTab('send')}
+            >
+              Poslať platbu
+            </button>
+          </div>
+          <div className="ss-detail-toolbar-meta">
+            <span>{room.memberCount || room.members.length} účastníci</span>
+          </div>
+        </div>
+
+        {tab === 'transactions' && (
+          <div className="ss-detail-panel-body">
+            <div className="ss-detail-table">
+              <div className="ss-detail-table-head ss-transaction-grid">
+                <span>DÁTUM</span>
+                <span>TYP</span>
+                <span>POPIS</span>
+                <span>SUMA</span>
+              </div>
+
+              {transactionRows.length === 0 && (
+                <div className="ss-room-empty">Žiadne transakcie v tomto priestore.</div>
+              )}
+
+              {transactionRows.map((tx, i) => {
+                const isIncoming = tx.to_iban === room.room_iban;
+                const otherIban = isIncoming ? tx.from_iban : tx.to_iban;
+                const otherUser = users.find((u) => u.user_iban === otherIban);
+                const otherName = otherUser?.name || otherIban;
+
+                return (
+                  <div className="ss-detail-table-row ss-transaction-grid" key={tx.id || i}>
+                    <span>{formatShortDate(tx.created_at)}</span>
+                    <span>{isIncoming ? 'Príjem' : 'Výdaj'}</span>
+                    <span>{isIncoming ? `${otherName} → priestor` : `Priestor → ${otherName}`}</span>
+                    <strong className={isIncoming ? 'is-positive' : 'is-negative'}>
                       {isIncoming ? '+' : '-'}
                       {formatAmount(tx.amount)} EUR
                     </strong>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* members tab */}
-      {tab === 'members' && (
-        <div className="ss-tab-panel">
-          <div className="ss-balance-chart">
-            {room.members.map((m) => {
-              return (
-                <div className="ss-balance-row" key={m.user_iban} style={{ padding: '8px 0' }}>
-                  <span className="tb-avatar" style={{ background: m.color }}>
-                    {m.avatar}
-                  </span>
-                  <span className="ss-balance-name" style={{ flex: 1, fontSize: '16px' }}>{m.name}</span>
-                </div>
-              );
-            })}
-          </div>
-          <button 
-            className="ss-btn ss-btn-secondary" 
-            type="button" 
-            style={{ width: '100%', marginTop: 16 }} 
-            onClick={() => setShowAddMember(true)}
-          >
-            + Pozvat clena
-          </button>
-        </div>
-      )}
-
-      {/* send tab */}
-      {tab === 'send' && (
-        <div className="ss-tab-panel">
-          <div className="ss-add-expense-form">
-            <label className="ss-label">Smer platby</label>
-            <select
-              className="ss-input"
-              value={sendDirection}
-              onChange={(e) => setSendDirection(e.target.value)}
-            >
-              <option value="to_room">Pouzivatel -- Priestor (vklad)</option>
-              <option value="from_room">Priestor -- Pouzivatel (vyber)</option>
-            </select>
-
-            <label className="ss-label">
-              {sendDirection === 'to_room' ? 'Z vasho uctu do priestoru' : 'Z priestoru na vas ucet'}
-            </label>
-            <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 6, marginBottom: 16, color: '#fff' }}>
-              Moj ucet ({currentUserIban})
+                );
+              })}
             </div>
-
-            <label className="ss-label">Suma (EUR)</label>
-            <input
-              className="ss-input"
-              type="number"
-              placeholder="0.00"
-              value={sendAmount}
-              onChange={(e) => setSendAmount(e.target.value)}
-            />
-
-            <button
-              className="ss-btn ss-btn-primary"
-              type="button"
-              style={{ width: '100%', marginTop: 8 }}
-              disabled={sending || !sendAmount}
-              onClick={handleSend}
-            >
-              {sending ? 'Spracovavam...' : 'Potvrdit platbu'}
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* shopping tab */}
-      {tab === 'shopping' && (
-        <div className="ss-tab-panel">
-          <div style={{ marginBottom: 16 }}>
-            <button className="ss-btn ss-btn-secondary" onClick={() => setShowAddCheck(!showAddCheck)} style={{ width: '100%', marginBottom: 8 }}>
-              {showAddCheck ? 'Zrusit' : '+ Pridat nakup (Manualne)'}
-            </button>
-            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
-            <button className="ss-btn ss-btn-primary" onClick={() => fileInputRef.current?.click()} style={{ width: '100%' }} disabled={parsingReceipt}>
-              {parsingReceipt ? 'OSKENOVAT BLOK (Spracovavam...)' : 'OSKENOVAT BLOK (FOTO)'}
-            </button>
-          </div>
-          {showAddCheck && (
-            <div className="ss-add-expense-form" style={{ marginBottom: 20 }}>
-              <label className="ss-label">Miesto nakupu (Obchod)</label>
-              <input className="ss-input" value={checkLocation} onChange={e => setCheckLocation(e.target.value)} placeholder="Tesco, Billa..." />
-              <label className="ss-label">Suma (EUR)</label>
-              <input className="ss-input" type="number" value={checkAmount} onChange={e => setCheckAmount(e.target.value)} placeholder="0.00" />
-              <button className="ss-btn ss-btn-primary" onClick={handleAddCheck} style={{ width: '100%', marginTop: 8 }} disabled={!checkAmount || !checkLocation}>
-                Ulozit nakup
+        {tab === 'members' && (
+          <div className="ss-detail-panel-body">
+            <div className="ss-detail-member-list">
+              {room.members.map((m) => (
+                <div className="ss-detail-member-row" key={m.user_iban}>
+                  <div className="ss-detail-member-main">
+                    <span className="tb-avatar" style={{ background: m.color }}>
+                      {m.avatar}
+                    </span>
+                    <div className="ss-detail-member-copy">
+                      <strong>{m.name}</strong>
+                      <span>{m.user_iban}</span>
+                    </div>
+                  </div>
+                  <span className="ss-state-badge is-active">Člen</span>
+                </div>
+              ))}
+            </div>
+            <div className="ss-detail-footer-actions">
+              <button className="ss-open-room" type="button" onClick={() => setShowAddMember(true)}>
+                + Pozvať člena
               </button>
             </div>
-          )}
-          <div className="ss-expense-list">
-            {(room.checks || []).length === 0 && <div className="ss-empty">Ziadne nakupy.</div>}
-            {(room.checks || []).map(chk => (
-              <div key={chk.id} style={{ background: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: 8, marginBottom: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <strong style={{ color: '#fff' }}>{chk.location}</strong>
-                  <strong style={{ color: 'var(--tb-green)' }}>{formatAmount(chk.amount)} EUR</strong>
+          </div>
+        )}
+
+        {tab === 'send' && (
+          <div className="ss-detail-panel-body">
+            <div className="ss-detail-form-grid">
+              <div className="ss-kpi-card ss-detail-info-card">
+                <span className="ss-kpi-label">SMER PLATBY</span>
+                <select
+                  className="ss-input"
+                  value={sendDirection}
+                  onChange={(e) => setSendDirection(e.target.value)}
+                >
+                  <option value="to_room">Používateľ → Priestor (vklad)</option>
+                  <option value="from_room">Priestor → Používateľ (výber)</option>
+                </select>
+              </div>
+
+              <div className="ss-kpi-card ss-detail-info-card">
+                <span className="ss-kpi-label">ÚČET</span>
+                <div className="ss-detail-account-box">
+                  {sendDirection === 'to_room' ? `Môj účet (${currentUserIban})` : `Priestor (${room.room_iban})`}
                 </div>
-                <div style={{ paddingLeft: 12, borderLeft: '2px solid rgba(255,255,255,0.1)' }}>
-                  {(chk.items || []).map(item => {
-                    const claimedUser = item.user_iban ? users.find(u => u.user_iban === item.user_iban) : null;
-                    const isMine = item.user_iban === currentUserIban;
-                    return (
-                      <div 
-                        key={item.id} 
-                        style={{ 
-                          display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#aaa', marginTop: 4, 
-                          cursor: 'pointer', padding: '4px 6px', background: isMine ? 'rgba(0,211,154,0.1)' : 'transparent', 
-                          borderRadius: 4, alignItems: 'center'
-                        }}
-                        onClick={async () => {
-                          await toggleCheckItemClaim(item.id, currentUserIban, item.user_iban);
-                          onRefresh();
-                        }}
-                      >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: isMine ? 1 : 0.8, color: isMine ? '#fff' : '#aaa' }}>
-                          <span style={{ 
-                            width: 16, height: 16, borderRadius: '50%', background: claimedUser ? 'var(--tb-blue)' : '#444', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff' 
-                          }}>
-                            {claimedUser ? getInitial(claimedUser.name || claimedUser.user_iban) : ''}
+              </div>
+
+              <div className="ss-kpi-card ss-detail-info-card ss-detail-send-card">
+                <span className="ss-kpi-label">SUMA</span>
+                <input
+                  className="ss-input"
+                  type="number"
+                  placeholder="0.00"
+                  value={sendAmount}
+                  onChange={(e) => setSendAmount(e.target.value)}
+                />
+                <button
+                  className="ss-kpi-cta ss-detail-submit"
+                  type="button"
+                  disabled={sending || !sendAmount}
+                  onClick={handleSend}
+                >
+                  {sending ? 'Spracovávam...' : 'Potvrdiť platbu'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'shopping' && (
+          <div className="ss-detail-panel-body">
+            <div className="ss-detail-toolbar-row">
+              <button className="ss-open-room" type="button" onClick={() => setShowAddCheck(!showAddCheck)}>
+                {showAddCheck ? 'Zrušiť' : '+ Pridať nákup'}
+              </button>
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleFileUpload}
+              />
+              <button
+                className="ss-kpi-cta ss-detail-submit"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={parsingReceipt}
+              >
+                {parsingReceipt ? 'Skenujem blok...' : 'Naskenovať blok'}
+              </button>
+            </div>
+
+            {showAddCheck && (
+              <div className="ss-detail-inline-form">
+                <input
+                  className="ss-input"
+                  value={checkLocation}
+                  onChange={(e) => setCheckLocation(e.target.value)}
+                  placeholder="Miesto nákupu"
+                />
+                <input
+                  className="ss-input"
+                  type="number"
+                  value={checkAmount}
+                  onChange={(e) => setCheckAmount(e.target.value)}
+                  placeholder="Suma (EUR)"
+                />
+                <button
+                  className="ss-kpi-cta ss-detail-submit"
+                  onClick={handleAddCheck}
+                  disabled={!checkAmount || !checkLocation}
+                >
+                  Uložiť nákup
+                </button>
+              </div>
+            )}
+
+            <div className="ss-detail-card-list">
+              {(room.checks || []).length === 0 && <div className="ss-room-empty">Žiadne nákupy.</div>}
+              {(room.checks || []).map((chk) => (
+                <div key={chk.id} className="ss-detail-block-card">
+                  <div className="ss-detail-block-head">
+                    <div>
+                      <strong>{chk.location}</strong>
+                      <span>{formatShortDate(chk.created_at)}</span>
+                    </div>
+                    <strong className="is-positive">{formatAmount(chk.amount)} EUR</strong>
+                  </div>
+
+                  <div className="ss-detail-items">
+                    {(chk.items || []).map((item) => {
+                      const claimedUser = item.user_iban
+                        ? users.find((u) => u.user_iban === item.user_iban)
+                        : null;
+                      const isMine = item.user_iban === currentUserIban;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="ss-detail-item-row"
+                          style={{
+                            cursor: 'pointer',
+                            padding: '8px 10px',
+                            borderRadius: 8,
+                            background: isMine ? 'rgba(0, 151, 230, 0.12)' : 'rgba(255,255,255,0.01)',
+                          }}
+                          onClick={async () => {
+                            await toggleCheckItemClaim(item.id, currentUserIban, item.user_iban);
+                            await onRefresh();
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              minWidth: 0,
+                            }}
+                          >
+                            <span
+                              className="tb-avatar"
+                              style={{
+                                width: 18,
+                                minWidth: 18,
+                                height: 18,
+                                fontSize: 10,
+                                background: claimedUser ? 'var(--tb-blue)' : 'rgba(255,255,255,0.14)',
+                                color: '#fff',
+                              }}
+                            >
+                              {claimedUser ? getInitial(claimedUser.name || claimedUser.user_iban) : ''}
+                            </span>
+                            <span>{item.name}</span>
                           </span>
-                          {item.name}
-                        </span>
-                        <span style={{ color: isMine ? '#fff' : '#aaa' }}>{formatAmount(item.amount)} EUR</span>
-                      </div>
-                    );
-                  })}
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <input className="ss-input" placeholder="Nova polozka..." id={`item-name-${chk.id}`} style={{ padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
-                    <input className="ss-input" type="number" placeholder="Suma" id={`item-amt-${chk.id}`} style={{ width: 80, padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
-                    <button className="ss-btn ss-btn-secondary" style={{ padding: '4px 12px', minHeight: 'unset', fontSize: 13 }} onClick={async () => {
-                      const nameInput = document.getElementById(`item-name-${chk.id}`);
-                      const amtInput = document.getElementById(`item-amt-${chk.id}`);
-                      if (!nameInput.value || !amtInput.value) return;
-                      await addCheckItem(chk.id, nameInput.value, parseFloat(amtInput.value), currentUserIban);
-                      nameInput.value = '';
-                      amtInput.value = '';
-                      onRefresh();
-                    }}>+</button>
+                          <span style={{ color: isMine ? '#ffffff' : '#c8cacf' }}>
+                            {formatAmount(item.amount)} EUR
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="ss-detail-add-item-row">
+                    <input className="ss-input" placeholder="Nová položka..." id={`item-name-${chk.id}`} />
+                    <input className="ss-input ss-detail-small-input" type="number" placeholder="Suma" id={`item-amt-${chk.id}`} />
+                    <button
+                      className="ss-open-room"
+                      onClick={async () => {
+                        const nameInput = document.getElementById(`item-name-${chk.id}`);
+                        const amtInput = document.getElementById(`item-amt-${chk.id}`);
+                        if (!nameInput?.value || !amtInput?.value) return;
+                        await addCheckItem(chk.id, nameInput.value, parseFloat(amtInput.value), currentUserIban);
+                        nameInput.value = '';
+                        amtInput.value = '';
+                        onRefresh();
+                      }}
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* reminders tab */}
-      {tab === 'reminders' && (
-        <div className="ss-tab-panel">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <input 
-              className="ss-input" 
-              placeholder="Napis pripomienku..." 
-              value={reminderText}
-              onChange={e => setReminderText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddReminder(e); }}
-            />
-            <button className="ss-btn ss-btn-primary" onClick={handleAddReminder}>Pridat</button>
-          </div>
-          <div className="ss-expense-list">
-            {(room.reminders || []).length === 0 && <div className="ss-empty">Ziadne pripomienky.</div>}
-            {(room.reminders || []).map(rem => (
-              <div 
-                key={rem.id} 
-                style={{ 
-                  display: 'flex', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', 
-                  borderRadius: 8, marginBottom: 8, cursor: 'pointer', opacity: rem.is_completed ? 0.5 : 1
+        {tab === 'reminders' && (
+          <div className="ss-detail-panel-body">
+            <div className="ss-detail-inline-form">
+              <input
+                className="ss-input"
+                placeholder="Napíš pripomienku..."
+                value={reminderText}
+                onChange={(e) => setReminderText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddReminder(e);
                 }}
-                onClick={() => handleToggleReminder(rem)}
-              >
-                <div style={{ 
-                  width: 18, height: 18, borderRadius: 4, border: '2px solid var(--tb-blue)', 
-                  marginRight: 12, background: rem.is_completed ? 'var(--tb-blue)' : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  {rem.is_completed && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
-                </div>
-                <span style={{ color: '#fff', textDecoration: rem.is_completed ? 'line-through' : 'none' }}>
-                  {rem.message}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+              />
+              <button className="ss-kpi-cta ss-detail-submit" onClick={handleAddReminder}>
+                Pridať
+              </button>
+            </div>
 
-      {/* members strip */}
-      <div className="ss-members-strip">
-        <span className="ss-members-label">IBAN priestoru:</span>
-        <span style={{ color: '#b8babf', fontSize: 13, fontFamily: 'monospace' }}>{room.room_iban}</span>
-      </div>
+            <div className="ss-detail-reminder-list">
+              {(room.reminders || []).length === 0 && <div className="ss-room-empty">Žiadne pripomienky.</div>}
+              {(room.reminders || []).map((rem) => (
+                <button
+                  key={rem.id}
+                  type="button"
+                  className={`ss-detail-reminder-row ${rem.is_completed ? 'is-completed' : ''}`}
+                  onClick={() => handleToggleReminder(rem)}
+                >
+                  <span className={`ss-detail-reminder-check ${rem.is_completed ? 'is-completed' : ''}`}>
+                    {rem.is_completed ? '✓' : ''}
+                  </span>
+                  <span>{rem.message}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       {showAddMember && (
         <AddMemberModal 
@@ -763,6 +1006,8 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
       if (targetAmount && Number(targetAmount) > 0) {
         await createGoal(roomIban, name, Number(targetAmount));
       }
+
+      await ensureRoomCover(roomIban);
 
       await onCreated();
       onClose();

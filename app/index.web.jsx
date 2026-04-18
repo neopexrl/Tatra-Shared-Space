@@ -30,6 +30,13 @@ const subItems = [
   'Termínované vklady',
 ];
 
+const SHARED_HERO_BACKGROUNDS = [
+  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&h=700&q=80',
+  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&h=700&q=80',
+  'https://images.unsplash.com/photo-1505764706515-aa95265c5abc?auto=format&fit=crop&w=1600&h=700&q=80',
+  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1600&h=700&q=80',
+];
+
 function Logo() {
   return (
     <div className="tb-logo" aria-label="Tatra banka demo logo">
@@ -213,11 +220,20 @@ function SpendingReportWidget() {
 function SharedSpacesWidget() {
   const [rooms, setRooms] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [activeBackground, setActiveBackground] = useState(0);
 
   useEffect(() => {
     getRooms()
       .then((data) => { setRooms(data || []); setLoaded(true); })
       .catch(() => setLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setActiveBackground((current) => (current + 1) % SHARED_HERO_BACKGROUNDS.length);
+    }, 3800);
+
+    return () => window.clearInterval(intervalId);
   }, []);
 
   const formatMoney = (amount) =>
@@ -235,55 +251,114 @@ function SharedSpacesWidget() {
     return Math.max(Math.ceil((balance * 1.8) / 100) * 100, 600);
   };
 
-  const visibleRooms = rooms.slice(0, 2);
-  const activeCount = rooms.filter((room) => Number(room.balance || 0) > 0).length;
-  const closedCount = Math.max(rooms.length - activeCount, 0);
-  const overviewText = loaded
-    ? `${rooms.length} priestory | ${activeCount} aktivne - ${closedCount} uzavrete`
-    : 'Nacitavam priestory...';
-  const footerText = loaded
-    ? `${closedCount} ${closedCount === 1 ? 'priestor uzavrety' : 'priestory uzavrete'}`
-    : 'Priestory sa nacitavaju';
+  const activeRooms = rooms.filter((room) => Number(room.balance || 0) > 0);
+  const totalBalance = rooms.reduce((sum, room) => sum + Number(room.balance || 0), 0);
+  const activeCount = activeRooms.length;
+  const pendingCount = activeRooms.filter((room) => {
+    const targetAmount = getTargetAmount(room);
+    return Number(room.balance || 0) > 0 && Number(room.balance || 0) < targetAmount;
+  }).length;
+  const pendingLabel = pendingCount === 1 ? 'Čaká na úhradu' : 'Čakajú na úhradu';
+  const badgeRooms = rooms.slice(0, 4);
 
   return (
-    <section className="tb-widget tb-shared-card">
-      <div className="tb-shared-shell">
-        <div className="tb-shared-header">
-          <h3 className="tb-shared-heading">SPOLOCNE VYDAVKY</h3>
-          <p className="tb-shared-overview">{overviewText}</p>
-        </div>
+    <section className="tb-shared-hero-card">
+      <div className="tb-shared-hero-backgrounds" aria-hidden="true">
+        {SHARED_HERO_BACKGROUNDS.map((imageUrl, index) => (
+          <span
+            key={imageUrl}
+            className={`tb-shared-hero-bg ${index === activeBackground ? 'is-active' : ''}`}
+            style={{ backgroundImage: `url(${imageUrl})` }}
+          />
+        ))}
+        <span className="tb-shared-hero-overlay" />
+        <span className="tb-shared-hero-fade" />
+      </div>
 
-        <div className="tb-shared-items">
-          {loaded && visibleRooms.length === 0 && (
-            <div className="tb-shared-empty">Zatial tu nie su ziadne priestory.</div>
-          )}
+      <div className="tb-shared-hero-inner">
+        <span className="tb-shared-hero-badge">NOVÉ</span>
 
-          {visibleRooms.map((room) => {
-            const targetAmount = getTargetAmount(room);
-            const progress = Math.max(8, Math.min((Number(room.balance || 0) / targetAmount) * 100, 100));
+        <div className="tb-shared-hero-main">
+          <div className="tb-shared-hero-copy">
+            <h3 className="tb-shared-hero-title">Spoločné výdavky</h3>
+            <p className="tb-shared-hero-text">
+              Správa spoločných priestorov, príspevkov a vyrovnaní v jednom module.
+            </p>
+          </div>
 
-            return (
-              <div className="tb-shared-item" key={room.room_iban}>
-                <div className="tb-shared-item-head">
-                  <span className="tb-shared-item-name">{room.name || `Room ${room.room_iban}`}</span>
-                  <strong className="tb-shared-item-amount">{formatMoney(room.balance)} EUR</strong>
-                </div>
-                <div className="tb-shared-item-meta">
-                  <span className="tb-shared-item-target">Ciel {formatMoney(targetAmount)} EUR</span>
-                  <span className="tb-shared-item-bar" aria-hidden="true">
-                    <span className="tb-shared-item-fill" style={{ width: `${progress}%` }} />
-                  </span>
-                </div>
+          <div className="tb-shared-hero-side">
+            <div className="tb-shared-hero-stats-wrap">
+              <div className="tb-shared-hero-stats">
+                <span>
+                  <strong>{loaded ? rooms.length : '—'}</strong>
+                  <small>Priestorov</small>
+                </span>
+                <span>
+                  <strong>{loaded ? activeCount : '—'}</strong>
+                  <small>Aktívne</small>
+                </span>
+                <span>
+                  <strong>{loaded ? pendingCount : '—'}</strong>
+                  <small>{pendingLabel}</small>
+                </span>
               </div>
-            );
-          })}
+              <div className="tb-shared-hero-balance">
+                <span>Spoločný zostatok</span>
+                <strong>{loaded ? `${formatMoney(totalBalance)} EUR` : 'Načítavam'}</strong>
+              </div>
+            </div>
+
+            <button className="tb-shared-hero-open" type="button" onClick={() => router.push('/shared-spaces')}>
+              Otvoriť <span>›</span>
+            </button>
+          </div>
         </div>
 
-        <div className="tb-shared-bottom">
-          <span className="tb-shared-bottom-text">{footerText}</span>
-          <button className="tb-shared-open" type="button" onClick={() => router.push('/shared-spaces')}>
-            Otvorit
-          </button>
+        <div className="tb-shared-hero-footer">
+          <div className="tb-shared-hero-participants">
+            <div className="tb-shared-hero-icons">
+              {badgeRooms.map((room, index) => (
+                <span
+                  key={room.room_iban}
+                  className={`tb-shared-hero-icon is-${index + 1}`}
+                  aria-label={room.name || room.room_iban}
+                >
+                  {room.name ? room.name.charAt(0).toUpperCase() : '•'}
+                </span>
+              ))}
+              {!loaded && (
+                <>
+                  <span className="tb-shared-hero-icon is-1">•</span>
+                  <span className="tb-shared-hero-icon is-2">•</span>
+                  <span className="tb-shared-hero-icon is-3">•</span>
+                </>
+              )}
+            </div>
+            <span className="tb-shared-hero-footer-note">
+              {loaded ? `${rooms.length} priestorov • ${formatMoney(totalBalance)} EUR celkom` : 'Načítavam priestory...'}
+            </span>
+          </div>
+
+          <div className="tb-shared-hero-tickers">
+            {rooms.slice(0, 2).map((room) => {
+              const targetAmount = getTargetAmount(room);
+              const progress = Math.max(8, Math.min((Number(room.balance || 0) / targetAmount) * 100, 100));
+
+              return (
+                <div className="tb-shared-hero-ticker" key={room.room_iban}>
+                  <span className="tb-shared-hero-ticker-name">{room.name || room.room_iban}</span>
+                  <span className="tb-shared-hero-ticker-track" aria-hidden="true">
+                    <span className="tb-shared-hero-ticker-fill" style={{ width: `${progress}%` }} />
+                  </span>
+                  <strong>{formatMoney(room.balance)} EUR</strong>
+                </div>
+              );
+            })}
+            {loaded && rooms.length === 0 && (
+              <div className="tb-shared-hero-empty">Zatiaľ tu nie sú žiadne priestory.</div>
+            )}
+            {!loaded && <div className="tb-shared-hero-empty">Načítavam priestory...</div>}
+          </div>
         </div>
       </div>
     </section>
@@ -336,13 +411,13 @@ function MainContent() {
         <div className="tb-page-actions">
           <a className="tb-add-widget" href="#add-widget">Pridať widget <b>+</b></a>
         </div>
+        <SharedSpacesWidget />
         <div className="tb-widgets-grid">
           <AccountWidget />
           <NewsWidget />
           <SpendingReportWidget />
           <PensionWidget />
           <RatesWidget />
-          <SharedSpacesWidget />
         </div>
       </div>
     </main>
