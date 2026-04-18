@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { router } from 'expo-router';
 import '../src/web-shell/bank-shell.css';
 import {
@@ -12,10 +12,42 @@ import {
   addRoomMember,
   getGoalsForRoom,
   createGoal,
+  getChecks,
+  getCheckListItems,
+  createCheck,
+  addCheckItem,
+  getReminders,
+  createReminder,
+  toggleReminder,
 } from '../src/setup/supabase';
 
 /* ─── constants ─── */
 const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
+const sideItems = [
+  'Prehľad',
+  'Účty',
+  'Debetné karty',
+  'Kreditné karty',
+  'Úvery',
+  'Podielové fondy',
+  'DDS dôchodok',
+  'Poistné produkty',
+  'Termínované vklady',
+  'Cenné papiere',
+  'Účty v iných bankách',
+  'Ponuky',
+];
+const subItems = [
+  'Prehľad',
+  'Účty',
+  'Debetné karty',
+  'Kreditné karty',
+  'Úvery',
+  'Podielové fondy',
+  'DDS dôchodok',
+  'Poistné produkty',
+  'Termínované vklady',
+];
 
 /* ─── helpers ─── */
 function formatAmount(n) {
@@ -48,17 +80,124 @@ async function loadFullData() {
         };
       });
 
+      // get new data
+      const checks = await getChecks(room.room_iban);
+      const reminders = await getReminders(room.room_iban);
+      const enrichedChecks = await Promise.all(
+        checks.map(async (chk) => {
+          const items = await getCheckListItems(chk.id);
+          return { ...chk, items };
+        })
+      );
+
       return {
         ...room,
         members: enrichedMembers,
         transactions,
         memberCount: enrichedMembers.length,
         targetAmount: goals.length > 0 ? goals[0].amount : null,
+        checks: enrichedChecks,
+        reminders,
       };
     })
   );
 
   return { users, rooms: enrichedRooms };
+}
+
+/* ─── bank shell ─── */
+function Logo() {
+  return (
+    <div className="tb-logo" aria-label="Tatra banka demo logo">
+      <img src="/mock-shell/images.png" alt="" />
+    </div>
+  );
+}
+
+function TopBar() {
+  return (
+    <header className="tb-topbar">
+      <button className="tb-hamburger" type="button" aria-label="Menu">
+        <span />
+      </button>
+      <Logo />
+
+      <nav className="tb-main-nav" aria-label="Main navigation">
+        <a className="is-active" href="#products">Produkty</a>
+        <a href="#payments">Platby</a>
+        <a href="#mafin">MaFin</a>
+        <a href="#documents">Dokumenty</a>
+        <a href="#settings">Nastavenia</a>
+      </nav>
+
+      <select className="tb-payment-select" defaultValue="">
+        <option value="" disabled>Zadať platbu</option>
+        <option>Nová platba</option>
+      </select>
+
+      <div className="tb-topbar-spacer" />
+
+      <div className="tb-top-icons" aria-hidden="true">
+        <span className="tb-icon cart" />
+        <span className="tb-icon help" />
+        <span className="tb-icon mail" />
+        <span className="tb-icon user" />
+      </div>
+      <button className="tb-logout" type="button">Odhlásiť</button>
+
+      <div className="tb-mobile-icons" aria-hidden="true">
+        <span className="tb-icon euro" />
+        <span className="tb-icon mail" />
+      </div>
+    </header>
+  );
+}
+
+function Sidebar() {
+  return (
+    <aside className="tb-sidebar">
+      <nav className="tb-side-nav" aria-label="Product navigation">
+        {sideItems.map((item, index) => (
+          <a
+            key={item}
+            href={`#${item}`}
+            className={`${index === 1 ? 'is-active' : ''} ${item === 'Účty' ? 'has-dot' : ''}`}
+          >
+            {item}
+          </a>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function TabletSubNav() {
+  return (
+    <nav className="tb-tablet-subnav" aria-label="Product subnavigation">
+      {subItems.map((item, index) => (
+        <a
+          key={item}
+          href={`#${item}`}
+          className={`${index === 1 ? 'is-active' : ''} ${item === 'Účty' ? 'has-dot' : ''}`}
+        >
+          {item}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function SharedSpacesShell({ children }) {
+  return (
+    <div className="tb-shell ss-shell">
+      <TopBar />
+      <TabletSubNav />
+      <Sidebar />
+      <main className="tb-content">
+        <div className="tb-content-inner ss-shell-inner">{children}</div>
+      </main>
+    </div>
+  );
 }
 
 /* ─── components ─── */
@@ -90,6 +229,13 @@ function ErrorState({ message, onRetry }) {
       </button>
     </div>
   );
+}
+
+function formatShortDate(value) {
+  if (!value) return 'Bez dátumu';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Bez dátumu';
+  return date.toLocaleDateString('sk-SK');
 }
 
 function RoomCard({ room, onClick }) {
@@ -132,6 +278,34 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [showSendForm, setShowSendForm] = useState(false);
   const [sendDirection, setSendDirection] = useState('to_room'); // 'to_room' or 'from_room'
   const [showAddMember, setShowAddMember] = useState(false);
+
+  const [showAddCheck, setShowAddCheck] = useState(false);
+  const [checkLocation, setCheckLocation] = useState('');
+  const [checkAmount, setCheckAmount] = useState('');
+  const [reminderText, setReminderText] = useState('');
+
+  const handleAddCheck = async (e) => {
+    e.preventDefault();
+    if (!checkLocation || !checkAmount) return;
+    await createCheck(room.room_iban, Number(checkAmount), checkLocation);
+    setCheckLocation('');
+    setCheckAmount('');
+    setShowAddCheck(false);
+    await onRefresh();
+  };
+
+  const handleAddReminder = async (e) => {
+    e.preventDefault();
+    if (!reminderText) return;
+    await createReminder(room.room_iban, currentUserIban, reminderText);
+    setReminderText('');
+    await onRefresh();
+  };
+
+  const handleToggleReminder = async (rem) => {
+    await toggleReminder(rem.id, !rem.is_completed);
+    await onRefresh();
+  };
 
   const handleSend = async () => {
     if (!sendAmount || Number(sendAmount) <= 0) return;
@@ -195,6 +369,20 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
         </button>
         <button
           type="button"
+          className={tab === 'shopping' ? 'is-active' : ''}
+          onClick={() => setTab('shopping')}
+        >
+          Nakupy
+        </button>
+        <button
+          type="button"
+          className={tab === 'reminders' ? 'is-active' : ''}
+          onClick={() => setTab('reminders')}
+        >
+          Pripomienky
+        </button>
+        <button
+          type="button"
           className={tab === 'send' ? 'is-active' : ''}
           onClick={() => setTab('send')}
         >
@@ -248,25 +436,12 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
         <div className="ss-tab-panel">
           <div className="ss-balance-chart">
             {room.members.map((m) => {
-              const maxBal = Math.max(...room.members.map((mm) => Math.abs(mm.userBalance || 0)), 1);
-              const pct = (Math.abs(m.userBalance || 0) / maxBal) * 100;
               return (
-                <div className="ss-balance-row" key={m.user_iban}>
+                <div className="ss-balance-row" key={m.user_iban} style={{ padding: '8px 0' }}>
                   <span className="tb-avatar" style={{ background: m.color }}>
                     {m.avatar}
                   </span>
-                  <span className="ss-balance-name">{m.name}</span>
-                  <div className="ss-balance-bar-wrap">
-                    <div
-                      className={`ss-balance-bar ${(m.userBalance || 0) >= 0 ? 'positive' : 'negative'}`}
-                      style={{ width: `${Math.max(pct, 4)}%` }}
-                    />
-                  </div>
-                  <span
-                    className={`ss-balance-amount ${(m.userBalance || 0) >= 0 ? 'positive' : 'negative'}`}
-                  >
-                    {formatAmount(m.userBalance || 0)} EUR
-                  </span>
+                  <span className="ss-balance-name" style={{ flex: 1, fontSize: '16px' }}>{m.name}</span>
                 </div>
               );
             })}
@@ -321,6 +496,100 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
             >
               {sending ? 'Spracovavam...' : 'Potvrdit platbu'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* shopping tab */}
+      {tab === 'shopping' && (
+        <div className="ss-tab-panel">
+          <div style={{ marginBottom: 16 }}>
+            <button className="ss-btn ss-btn-secondary" onClick={() => setShowAddCheck(!showAddCheck)} style={{ width: '100%' }}>
+              {showAddCheck ? 'Zrusit' : '+ Pridat nakup'}
+            </button>
+          </div>
+          {showAddCheck && (
+            <div className="ss-add-expense-form" style={{ marginBottom: 20 }}>
+              <label className="ss-label">Miesto nakupu (Obchod)</label>
+              <input className="ss-input" value={checkLocation} onChange={e => setCheckLocation(e.target.value)} placeholder="Tesco, Billa..." />
+              <label className="ss-label">Suma (EUR)</label>
+              <input className="ss-input" type="number" value={checkAmount} onChange={e => setCheckAmount(e.target.value)} placeholder="0.00" />
+              <button className="ss-btn ss-btn-primary" onClick={handleAddCheck} style={{ width: '100%', marginTop: 8 }} disabled={!checkAmount || !checkLocation}>
+                Ulozit nakup
+              </button>
+            </div>
+          )}
+          <div className="ss-expense-list">
+            {(room.checks || []).length === 0 && <div className="ss-empty">Ziadne nakupy.</div>}
+            {(room.checks || []).map(chk => (
+              <div key={chk.id} style={{ background: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: 8, marginBottom: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <strong style={{ color: '#fff' }}>{chk.location}</strong>
+                  <strong style={{ color: 'var(--tb-green)' }}>{formatAmount(chk.amount)} EUR</strong>
+                </div>
+                <div style={{ paddingLeft: 12, borderLeft: '2px solid rgba(255,255,255,0.1)' }}>
+                  {(chk.items || []).map(item => (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#aaa', marginTop: 4 }}>
+                      <span>{item.name}</span>
+                      <span>{formatAmount(item.amount)} EUR</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                    <input className="ss-input" placeholder="Nova polozka..." id={`item-name-${chk.id}`} style={{ padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
+                    <input className="ss-input" type="number" placeholder="Suma" id={`item-amt-${chk.id}`} style={{ width: 80, padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
+                    <button className="ss-btn ss-btn-secondary" style={{ padding: '4px 12px', minHeight: 'unset', fontSize: 13 }} onClick={async () => {
+                      const nameInput = document.getElementById(`item-name-${chk.id}`);
+                      const amtInput = document.getElementById(`item-amt-${chk.id}`);
+                      if (!nameInput.value || !amtInput.value) return;
+                      await addCheckItem(chk.id, nameInput.value, parseFloat(amtInput.value), currentUserIban);
+                      nameInput.value = '';
+                      amtInput.value = '';
+                      onRefresh();
+                    }}>+</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* reminders tab */}
+      {tab === 'reminders' && (
+        <div className="ss-tab-panel">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <input 
+              className="ss-input" 
+              placeholder="Napis pripomienku..." 
+              value={reminderText}
+              onChange={e => setReminderText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddReminder(e); }}
+            />
+            <button className="ss-btn ss-btn-primary" onClick={handleAddReminder}>Pridat</button>
+          </div>
+          <div className="ss-expense-list">
+            {(room.reminders || []).length === 0 && <div className="ss-empty">Ziadne pripomienky.</div>}
+            {(room.reminders || []).map(rem => (
+              <div 
+                key={rem.id} 
+                style={{ 
+                  display: 'flex', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', 
+                  borderRadius: 8, marginBottom: 8, cursor: 'pointer', opacity: rem.is_completed ? 0.5 : 1
+                }}
+                onClick={() => handleToggleReminder(rem)}
+              >
+                <div style={{ 
+                  width: 18, height: 18, borderRadius: 4, border: '2px solid var(--tb-blue)', 
+                  marginRight: 12, background: rem.is_completed ? 'var(--tb-blue)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {rem.is_completed && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
+                </div>
+                <span style={{ color: '#fff', textDecoration: rem.is_completed ? 'line-through' : 'none' }}>
+                  {rem.message}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -502,6 +771,8 @@ export default function SharedSpacesWebPage() {
   const [error, setError] = useState(null);
   const [selectedRoomIban, setSelectedRoomIban] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [filterTab, setFilterTab] = useState('all');
+  const [sortBy, setSortBy] = useState('latest');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -522,75 +793,328 @@ export default function SharedSpacesWebPage() {
   }, [fetchData]);
 
   const selectedRoom = data?.rooms?.find((r) => r.room_iban === selectedRoomIban);
+  const usersByIban = useMemo(
+    () => new Map((data?.users || []).map((user) => [user.user_iban, user])),
+    [data]
+  );
+
+  const roomModels = useMemo(() => {
+    if (!data?.rooms) return [];
+
+    return data.rooms.map((room) => {
+      const balance = Number(room.balance || 0);
+      const targetAmount = Number(room.targetAmount || 0);
+      const sortedTransactions = [...(room.transactions || [])].sort((a, b) => {
+        const aTs = a?.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTs = b?.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTs - aTs;
+      });
+      const latestTransaction = sortedTransactions[0] || null;
+      const isClosed =
+        Boolean(room.closed_at || room.is_closed || room.status === 'closed') ||
+        (!sortedTransactions.length && balance <= 0 && room.members.length <= 1);
+      const hasPending = !isClosed && targetAmount > 0 && balance > 0 && balance < targetAmount;
+      const progress = targetAmount > 0 ? Math.max(0, Math.min((balance / targetAmount) * 100, 100)) : 0;
+      const transactionCount = sortedTransactions.length;
+
+      return {
+        ...room,
+        balance,
+        targetAmount,
+        isClosed,
+        isActive: !isClosed,
+        hasPending,
+        progress,
+        transactionCount,
+        latestTransaction,
+        latestActivityTs: latestTransaction?.created_at ? new Date(latestTransaction.created_at).getTime() : 0,
+        activityLabel:
+          transactionCount === 0
+            ? 'Bez transakcií'
+            : `${transactionCount} ${transactionCount === 1 ? 'transakcia' : transactionCount < 5 ? 'transakcie' : 'transakcií'}`,
+        activityHint: isClosed
+          ? latestTransaction?.created_at
+            ? `Uzavreté ${formatShortDate(latestTransaction.created_at)}`
+            : 'Uzavretý priestor'
+          : hasPending
+            ? '1 čaká úhrada'
+            : '',
+      };
+    });
+  }, [data]);
+
+  const activityRows = useMemo(() => {
+    return roomModels
+      .flatMap((room) =>
+        room.transactions.map((tx, index) => {
+          const isIncoming = tx.to_iban === room.room_iban;
+          const counterpartyIban = isIncoming ? tx.from_iban : tx.to_iban;
+          const counterparty = usersByIban.get(counterpartyIban);
+          const counterpartyName = counterparty?.name || counterpartyIban || 'Neznámy používateľ';
+
+          return {
+            id: `${room.room_iban}-${tx.id || index}`,
+            date: tx.created_at,
+            roomName: room.name || room.room_iban,
+            description: isIncoming
+              ? `${counterpartyName} pridal príspevok do priestoru`
+              : `${counterpartyName} dostal vyrovnanie z priestoru`,
+            amount: Number(tx.amount || 0),
+            isPositive: isIncoming,
+          };
+        })
+      )
+      .sort((a, b) => {
+        const aTs = a.date ? new Date(a.date).getTime() : 0;
+        const bTs = b.date ? new Date(b.date).getTime() : 0;
+        return bTs - aTs;
+      })
+      .slice(0, 4);
+  }, [roomModels, usersByIban]);
 
   if (loading) {
     return (
-      <div className="ss-page">
-        <div className="ss-container">
+      <SharedSpacesShell>
+        <div className="ss-dashboard">
           <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
           <LoadingState />
         </div>
-      </div>
+      </SharedSpacesShell>
     );
   }
 
   if (error) {
     return (
-      <div className="ss-page">
-        <div className="ss-container">
+      <SharedSpacesShell>
+        <div className="ss-dashboard">
           <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
           <ErrorState message={error} onRetry={fetchData} />
         </div>
-      </div>
+      </SharedSpacesShell>
     );
   }
 
-  const totalBalance = data.rooms.reduce((a, r) => a + (r.balance || 0), 0);
-  const totalTransactions = data.rooms.reduce((a, r) => a + r.transactions.length, 0);
-  const currentUserIban = data.users?.[0]?.user_iban;
+  const currentUser = data.users?.[0];
+  const currentUserIban = currentUser?.user_iban;
+  const totalBalance = roomModels.reduce((sum, room) => sum + room.balance, 0);
+  const activeSpaces = roomModels.filter((room) => room.isActive).length;
+  const closedSpaces = roomModels.length - activeSpaces;
+  const pendingSettlements = roomModels.filter((room) => room.hasPending).length;
+  const filteredRooms = [...roomModels]
+    .filter((room) => {
+      if (filterTab === 'active') return room.isActive;
+      if (filterTab === 'closed') return room.isClosed;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'balance') return b.balance - a.balance;
+      if (sortBy === 'name') return (a.name || a.room_iban).localeCompare(b.name || b.room_iban, 'sk');
+      return b.latestActivityTs - a.latestActivityTs;
+    });
+
+  const renderListView = () => (
+    <div className="ss-dashboard">
+      <div className="ss-dashboard-header">
+        <div className="ss-dashboard-title-wrap">
+          <div className="ss-dashboard-title-row">
+            <h1 className="ss-dashboard-title">SPOLOČNÉ VÝDAVKY</h1>
+            <button className="ss-dashboard-refresh" type="button" onClick={fetchData} aria-label="Obnoviť dáta">
+              ↻
+            </button>
+          </div>
+        </div>
+        <button className="ss-dashboard-link" type="button" onClick={() => router.push('/')}>
+          Späť na prehľad
+        </button>
+      </div>
+
+      <div className="ss-kpi-row">
+        <div className="ss-kpi-card">
+          <span className="ss-kpi-label">CELKOVÝ ZOSTATOK</span>
+          <strong className="ss-kpi-value">{formatAmount(totalBalance)} EUR</strong>
+        </div>
+        <div className="ss-kpi-card">
+          <span className="ss-kpi-label">AKTÍVNE PRIESTORY</span>
+          <strong className="ss-kpi-value">{activeSpaces}</strong>
+        </div>
+        <div className="ss-kpi-card">
+          <span className="ss-kpi-label">ČAKAJÚCE VYROVNANIA</span>
+          <strong className="ss-kpi-value">{pendingSettlements}</strong>
+        </div>
+        <div className="ss-kpi-card">
+          <span className="ss-kpi-label">UZAVRETÉ PRIESTORY</span>
+          <strong className="ss-kpi-value">{closedSpaces}</strong>
+        </div>
+        <div className="ss-kpi-cta-wrap">
+          <button className="ss-kpi-cta" type="button" onClick={() => setShowCreate(true)}>
+            <span>+</span>
+            Vytvoriť priestor
+          </button>
+        </div>
+      </div>
+
+      <section className="ss-table-panel">
+        <div className="ss-panel-toolbar">
+          <div className="ss-dashboard-tabs" role="tablist" aria-label="Filtrovať priestory">
+            <button
+              type="button"
+              className={filterTab === 'all' ? 'is-active' : ''}
+              onClick={() => setFilterTab('all')}
+            >
+              Všetky priestory
+            </button>
+            <button
+              type="button"
+              className={filterTab === 'active' ? 'is-active' : ''}
+              onClick={() => setFilterTab('active')}
+            >
+              Aktívne
+            </button>
+            <button
+              type="button"
+              className={filterTab === 'closed' ? 'is-active' : ''}
+              onClick={() => setFilterTab('closed')}
+            >
+              Uzavreté
+            </button>
+          </div>
+
+          <label className="ss-sort-field">
+            <span>Zoradiť podľa:</span>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <option value="latest">Posledná aktivita</option>
+              <option value="balance">Najvyšší zostatok</option>
+              <option value="name">Názov priestoru</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="ss-room-table-wrap">
+          <div className="ss-room-table">
+            <div className="ss-room-table-head">
+              <span>NÁZOV PRIESTORU</span>
+              <span>ÚČASTNÍCI</span>
+              <span>STAV</span>
+              <span>AKTIVITA</span>
+              <span>ZOSTATOK</span>
+              <span />
+              <span />
+            </div>
+
+            {filteredRooms.length === 0 && (
+              <div className="ss-room-empty">Zatiaľ tu nie sú žiadne priestory.</div>
+            )}
+
+            {filteredRooms.map((room) => (
+              <div className="ss-room-row" key={room.room_iban}>
+                <div className="ss-room-name-cell">
+                  <span className="ss-room-letter">{getInitial(room.name || room.room_iban)}</span>
+                  <div className="ss-room-name-copy">
+                    <strong>{room.name || room.room_iban}</strong>
+                    <span>{room.room_iban}</span>
+                  </div>
+                </div>
+
+                <div className="ss-room-members-cell">
+                  {room.members.slice(0, 3).map((member, index) => (
+                    <span
+                      key={member.user_iban || index}
+                      className="tb-avatar"
+                      style={{ background: member.color, marginLeft: index === 0 ? 0 : -6 }}
+                    >
+                      {member.avatar}
+                    </span>
+                  ))}
+                  {room.members.length > 3 && (
+                    <span className="tb-avatar ss-room-more-members">+{room.members.length - 3}</span>
+                  )}
+                  {room.members.length === 0 && <span className="ss-room-members-dash">-</span>}
+                </div>
+
+                <div className="ss-room-state-cell">
+                  <span className={`ss-state-badge ${room.isClosed ? 'is-closed' : 'is-active'}`}>
+                    {room.isClosed ? 'Uzavretý' : 'Aktívny'}
+                  </span>
+                </div>
+
+                <div className="ss-room-activity-cell">
+                  <span>{room.activityLabel}</span>
+                  {room.activityHint && (
+                    <small className={room.hasPending ? 'is-pending' : ''}>{room.activityHint}</small>
+                  )}
+                </div>
+
+                <div className="ss-room-balance-cell">
+                  <strong>{formatAmount(room.balance)} EUR</strong>
+                </div>
+
+                <div className="ss-room-action-cell">
+                  <button
+                    className="ss-open-room"
+                    type="button"
+                    onClick={() => setSelectedRoomIban(room.room_iban)}
+                  >
+                    Zobraziť
+                  </button>
+                </div>
+
+                <div className="ss-room-menu-cell">
+                  <button className="ss-kebab" type="button" aria-label="Ďalšie možnosti">
+                    ⋮
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="ss-activity-panel">
+        <div className="ss-section-header">
+          <h2>POSLEDNÁ AKTIVITA</h2>
+          <button className="ss-section-link" type="button">Zobraziť všetku aktivitu</button>
+        </div>
+
+        <div className="ss-activity-table-wrap">
+          <div className="ss-activity-table">
+            <div className="ss-activity-table-head">
+              <span>DÁTUM</span>
+              <span>PRIESTOR</span>
+              <span>POPIS</span>
+              <span>SUMA</span>
+              <span />
+            </div>
+
+            {activityRows.length === 0 && (
+              <div className="ss-room-empty">Posledná aktivita sa zobrazí po prvých transakciách.</div>
+            )}
+
+            {activityRows.map((item) => (
+              <div className="ss-activity-row" key={item.id}>
+                <span>{formatShortDate(item.date)}</span>
+                <span>{item.roomName}</span>
+                <span>{item.description}</span>
+                <strong className={item.isPositive ? 'is-positive' : 'is-negative'}>
+                  {item.isPositive ? '+' : '-'}
+                  {formatAmount(item.amount)} EUR
+                </strong>
+                <button className="ss-activity-info" type="button" aria-label="Detail aktivity">
+                  i
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
 
   return (
-    <div className="ss-page">
-      <div className="ss-container">
-        {!selectedRoom ? (
-          <>
-            <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
-
-            <div className="ss-overview-bar">
-              <div className="ss-overview-stat">
-                <span>Celkovy zostatok</span>
-                <strong>{formatAmount(totalBalance)} EUR</strong>
-              </div>
-              <div className="ss-overview-stat">
-                <span>Aktivne priestory</span>
-                <strong>{data.rooms.length}</strong>
-              </div>
-              <div className="ss-overview-stat">
-                <span>Celkom transakcii</span>
-                <strong>{totalTransactions}</strong>
-              </div>
-            </div>
-
-            <div className="ss-create-row">
-              <button className="ss-btn ss-btn-create" type="button" onClick={() => setShowCreate(true)}>
-                + Vytvorit novy priestor
-              </button>
-            </div>
-
-            <div className="ss-space-list">
-              {data.rooms.map((room) => (
-                <RoomCard
-                  key={room.room_iban}
-                  room={room}
-                  onClick={() => setSelectedRoomIban(room.room_iban)}
-                />
-              ))}
-              {data.rooms.length === 0 && (
-                <div className="ss-empty">Ziadne priestory.</div>
-              )}
-            </div>
-          </>
-        ) : (
+    <SharedSpacesShell>
+      {!selectedRoom ? (
+        renderListView()
+      ) : (
+        <div className="ss-dashboard ss-detail-shell">
           <RoomDetail
             room={selectedRoom}
             users={data.users}
@@ -598,8 +1122,8 @@ export default function SharedSpacesWebPage() {
             onBack={() => setSelectedRoomIban(null)}
             onRefresh={fetchData}
           />
-        )}
-      </div>
+        </div>
+      )}
 
       {showCreate && currentUserIban && (
         <CreateSpaceModal 
@@ -609,6 +1133,6 @@ export default function SharedSpacesWebPage() {
           onCreated={fetchData} 
         />
       )}
-    </div>
+    </SharedSpacesShell>
   );
 }
