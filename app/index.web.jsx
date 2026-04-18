@@ -215,6 +215,52 @@ function SpendingReportWidget() {
   );
 }
 
+function SharedSpacesWidget() {
+  const spaces = [
+    { name: 'Tatry Trip', members: 4, total: '342,50', you_owe: '85,63' },
+    { name: 'Byt Košická', members: 3, total: '1 240,00', you_owe: '0,00' },
+  ];
+
+  return (
+    <section className="tb-widget tb-shared-card" style={{ cursor: 'pointer' }} onClick={() => router.push('/shared-spaces')}>
+      <div className="tb-widget-header">Shared Spaces</div>
+      <div className="tb-shared-body">
+        <div className="tb-shared-summary">
+          <div className="tb-shared-stat">
+            <span className="tb-shared-stat-label">Aktívne priestory</span>
+            <strong className="tb-shared-stat-value">{spaces.length}</strong>
+          </div>
+          <div className="tb-shared-stat">
+            <span className="tb-shared-stat-label">Dlžíte</span>
+            <strong className="tb-shared-stat-value tb-shared-owe">85,63 EUR</strong>
+          </div>
+        </div>
+
+        <div className="tb-shared-spaces-list">
+          {spaces.map((space) => (
+            <div className="tb-shared-space-row" key={space.name}>
+              <span className="tb-shared-space-name">{space.name}</span>
+              <span className="tb-shared-space-amount">{space.total} EUR</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="tb-shared-avatars">
+          <span className="tb-avatar" style={{ background: '#52c7bc' }}>M</span>
+          <span className="tb-avatar" style={{ background: '#50a9ec' }}>J</span>
+          <span className="tb-avatar" style={{ background: '#557fe8' }}>S</span>
+          <span className="tb-avatar" style={{ background: '#c8b88f' }}>+2</span>
+        </div>
+      </div>
+
+      <div className="tb-shared-footer">
+        <span>Otvoriť Shared Spaces</span>
+        <span className="tb-shared-arrow">→</span>
+      </div>
+    </section>
+  );
+}
+
 function PensionWidget() {
   return (
     <section className="tb-widget tb-pension-card">
@@ -260,12 +306,12 @@ function MainContent() {
       <div className="tb-content-inner">
         <div className="tb-page-actions">
           <a className="tb-add-widget" href="#add-widget">Pridať widget <b>+</b></a>
-          <button className="tb-shared-pill" type="button" onClick={() => router.push('/shared-spaces')}>Shared Spaces</button>
         </div>
         <div className="tb-widgets-grid">
           <AccountWidget />
           <NewsWidget />
           <SpendingReportWidget />
+          <SharedSpacesWidget />
           <PensionWidget />
           <RatesWidget />
         </div>
@@ -282,8 +328,7 @@ export default function BankShellWebPage() {
       <TabletSubNav />
       <Sidebar />
       <MainContent />
-      <button className="tb-shared-fab" type="button" aria-label="Open Shared Spaces" onClick={() => router.push('/shared-spaces')}>+</button>
-      <button className="tb-assist-button" type="button" aria-label="Voice assistant">⌁</button>
+      <button className="tb-assist-button" type="button" aria-label="Voice assistant">&#x2301;</button>
     </div>
   );
 }
