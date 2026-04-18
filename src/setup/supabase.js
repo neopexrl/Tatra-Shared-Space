@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_URL = 'https://wctcuuftrcqrfaqgkoxc.supabase.co';
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.warn('Missing Supabase `.env` variables (URL or KEY). Make sure `.env` is loaded properly.');
+if (!SUPABASE_KEY) {
+  console.warn('Missing Supabase `.env` variables (KEY). Make sure `.env` is loaded properly.');
 }
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);

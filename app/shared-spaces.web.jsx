@@ -17,7 +17,6 @@ import {
 
 /* ─── constants ─── */
 const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
-const CURRENT_USER_IBAN = '01'; // Mock logged-in user
 
 /* ─── helpers ─── */
 function formatAmount(n) {
@@ -127,7 +126,7 @@ function RoomCard({ room, onClick }) {
   );
 }
 
-function RoomDetail({ room, users, onBack, onRefresh }) {
+function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [tab, setTab] = useState('transactions');
   const [sending, setSending] = useState(false);
   const [sendAmount, setSendAmount] = useState('');
@@ -140,9 +139,9 @@ function RoomDetail({ room, users, onBack, onRefresh }) {
     setSending(true);
     try {
       if (sendDirection === 'to_room') {
-        await sendToRoom(CURRENT_USER_IBAN, room.room_iban, Number(sendAmount));
+        await sendToRoom(currentUserIban, room.room_iban, Number(sendAmount));
       } else {
-        await sendFromRoom(room.room_iban, CURRENT_USER_IBAN, Number(sendAmount));
+        await sendFromRoom(room.room_iban, currentUserIban, Number(sendAmount));
       }
       setSendAmount('');
       setShowSendForm(false);
@@ -302,7 +301,7 @@ function RoomDetail({ room, users, onBack, onRefresh }) {
               {sendDirection === 'to_room' ? 'Z vasho uctu do priestoru' : 'Z priestoru na vas ucet'}
             </label>
             <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 6, marginBottom: 16, color: '#fff' }}>
-              Moj ucet ({CURRENT_USER_IBAN})
+              Moj ucet ({currentUserIban})
             </div>
 
             <label className="ss-label">Suma (EUR)</label>
@@ -406,7 +405,7 @@ function AddMemberModal({ room, allUsers, onClose, onAdded }) {
   );
 }
 
-function CreateSpaceModal({ onClose, onCreated, allUsers }) {
+function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('trip');
   const [targetAmount, setTargetAmount] = useState('');
@@ -422,7 +421,7 @@ function CreateSpaceModal({ onClose, onCreated, allUsers }) {
       await createRoom(roomIban, name, 0);
 
       // add selected members (and the current user automatically)
-      const membersToAdd = [...new Set([CURRENT_USER_IBAN, ...selectedUserIds])];
+      const membersToAdd = [...new Set([currentUserIban, ...selectedUserIds])];
       for (const userId of membersToAdd) {
         await addRoomMember(roomIban, userId);
       }
@@ -480,7 +479,7 @@ function CreateSpaceModal({ onClose, onCreated, allUsers }) {
 
           <label className="ss-label">Pozvat clenov z kontaktov</label>
           <div style={{ maxHeight: 150, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
-            {allUsers && allUsers.filter(u => u.user_iban !== CURRENT_USER_IBAN).map(u => (
+            {allUsers && allUsers.filter(u => u.user_iban !== currentUserIban).map(u => (
               <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
                 <input type="checkbox" checked={selectedUserIds.includes(u.user_iban)} onChange={() => toggleUser(u.user_iban)} />
                 {u.name || u.user_iban}
@@ -549,6 +548,7 @@ export default function SharedSpacesWebPage() {
 
   const totalBalance = data.rooms.reduce((a, r) => a + (r.balance || 0), 0);
   const totalTransactions = data.rooms.reduce((a, r) => a + r.transactions.length, 0);
+  const currentUserIban = data.users?.[0]?.user_iban;
 
   return (
     <div className="ss-page">
@@ -595,15 +595,17 @@ export default function SharedSpacesWebPage() {
           <RoomDetail
             room={selectedRoom}
             users={data.users}
+            currentUserIban={currentUserIban}
             onBack={() => setSelectedRoomIban(null)}
             onRefresh={fetchData}
           />
         )}
       </div>
 
-      {showCreate && (
+      {showCreate && currentUserIban && (
         <CreateSpaceModal 
           allUsers={data?.users || []} 
+          currentUserIban={currentUserIban}
           onClose={() => setShowCreate(false)} 
           onCreated={fetchData} 
         />
