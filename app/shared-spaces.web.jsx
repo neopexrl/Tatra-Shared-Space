@@ -16,9 +16,6 @@ import {
   getCheckListItems,
   createCheck,
   addCheckItem,
-  getReminders,
-  createReminder,
-  toggleReminder,
   batchAddCheckItems,
   toggleCheckItemClaim,
 } from '../src/setup/supabase';
@@ -227,7 +224,6 @@ async function loadFullData() {
 
       // get new data
       const checks = await getChecks(room.room_iban);
-      const reminders = await getReminders(room.room_iban);
       const enrichedChecks = await Promise.all(
         checks.map(async (chk) => {
           const items = await getCheckListItems(chk.id);
@@ -242,7 +238,6 @@ async function loadFullData() {
         memberCount: enrichedMembers.length,
         targetAmount: goals.length > 0 ? goals[0].amount : null,
         checks: enrichedChecks,
-        reminders,
       };
     })
   );
@@ -283,7 +278,6 @@ function TopBar() {
       <div className="tb-topbar-spacer" />
 
       <div className="tb-top-icons" aria-hidden="true">
-        <span className="tb-icon cart" />
         <span className="tb-icon help" />
         <span className="tb-icon mail" />
         <span className="tb-icon user" />
@@ -305,7 +299,13 @@ function Sidebar() {
         {sideItems.map((item, index) => (
           <a
             key={item}
-            href={`#${item}`}
+            href={item === 'Prehľad' ? '/' : `#${item}`}
+            onClick={(event) => {
+              if (item === 'Prehľad') {
+                event.preventDefault();
+                router.push('/');
+              }
+            }}
             className={`${index === 1 ? 'is-active' : ''} ${item === 'Účty' ? 'has-dot' : ''}`}
           >
             {item}
@@ -322,7 +322,13 @@ function TabletSubNav() {
       {subItems.map((item, index) => (
         <a
           key={item}
-          href={`#${item}`}
+          href={item === 'Prehľad' ? '/' : `#${item}`}
+          onClick={(event) => {
+            if (item === 'Prehľad') {
+              event.preventDefault();
+              router.push('/');
+            }
+          }}
           className={`${index === 1 ? 'is-active' : ''} ${item === 'Účty' ? 'has-dot' : ''}`}
         >
           {item}
@@ -560,19 +566,24 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [showAddCheck, setShowAddCheck] = useState(false);
   const [checkLocation, setCheckLocation] = useState('');
   const [checkAmount, setCheckAmount] = useState('');
-  const [reminderText, setReminderText] = useState('');
+  const [activeCheckId, setActiveCheckId] = useState(null);
+  const [draftItems, setDraftItems] = useState({});
+  const [isReceiptDragActive, setIsReceiptDragActive] = useState(false);
   const [parsingReceipt, setParsingReceipt] = useState(false);
   const fileInputRef = React.useRef(null);
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
+  const processReceiptFile = async (file) => {
     if (!file) return;
     setParsingReceipt(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          const base64String = reader.result.split(',')[1];
+          const rawResult = typeof reader.result === 'string' ? reader.result : '';
+          const base64String = rawResult.split(',')[1];
+          if (!base64String) {
+            throw new Error('Súbor sa nepodarilo načítať.');
+          }
           const result = await processDocumentBase64(file.type, base64String);
           if (result.type !== 'receipt') {
             alert('Nebol rozpoznany pokladnicny blok. Typ: ' + result.type);
@@ -588,13 +599,23 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
           alert('Chyba pri spracovani obrazka: ' + err.message);
         } finally {
           setParsingReceipt(false);
+          setIsReceiptDragActive(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
         }
       };
       reader.readAsDataURL(file);
     } catch (err) {
       console.error(err);
       setParsingReceipt(false);
+      setIsReceiptDragActive(false);
     }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    await processReceiptFile(file);
   };
 
   const handleAddCheck = async (e) => {
@@ -604,19 +625,6 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
     setCheckLocation('');
     setCheckAmount('');
     setShowAddCheck(false);
-    await onRefresh();
-  };
-
-  const handleAddReminder = async (e) => {
-    e.preventDefault();
-    if (!reminderText) return;
-    await createReminder(room.room_iban, currentUserIban, reminderText);
-    setReminderText('');
-    await onRefresh();
-  };
-
-  const handleToggleReminder = async (rem) => {
-    await toggleReminder(rem.id, !rem.is_completed);
     await onRefresh();
   };
 
@@ -638,6 +646,34 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
     }
   };
 
+  const updateDraftItem = useCallback((checkId, field, value) => {
+    setDraftItems((prev) => ({
+      ...prev,
+      [checkId]: {
+        ...(prev[checkId] || { name: '', amount: '' }),
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const handleAddDraftItem = useCallback(async (checkId) => {
+    const draft = draftItems[checkId] || {};
+    if (!draft.name || !draft.amount) return;
+    await addCheckItem(checkId, draft.name, parseFloat(draft.amount), null);
+    setDraftItems((prev) => ({
+      ...prev,
+      [checkId]: { name: '', amount: '' },
+    }));
+    await onRefresh();
+  }, [draftItems, onRefresh]);
+
+  const handleAssignCheckItem = useCallback(async (item, targetUserIban) => {
+    const claimOwner = targetUserIban ?? item.user_iban;
+    if (!claimOwner) return;
+    await toggleCheckItemClaim(item.id, claimOwner, item.user_iban);
+    await onRefresh();
+  }, [onRefresh]);
+
   useEffect(() => {
     let active = true;
 
@@ -654,8 +690,16 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
 
   const targetAmount = Number(room.targetAmount || 0);
   const progress = targetAmount > 0 ? Math.max(0, Math.min((Number(room.balance || 0) / targetAmount) * 100, 100)) : 0;
-  const incompleteReminders = (room.reminders || []).filter((rem) => !rem.is_completed).length;
   const latestTransactionDate = room.transactions?.[0]?.created_at;
+  const totalShoppingItems = (room.checks || []).reduce((sum, check) => sum + (check.items?.length || 0), 0);
+  const unassignedShoppingItems = (room.checks || []).reduce(
+    (sum, check) => sum + (check.items || []).filter((item) => !item.user_iban).length,
+    0
+  );
+  const activeCheck = useMemo(
+    () => (room.checks || []).find((check) => check.id === activeCheckId) || null,
+    [room.checks, activeCheckId]
+  );
 
   const transactionRows = [...(room.transactions || [])]
     .sort((a, b) => {
@@ -687,7 +731,7 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
               </div>
               <h1 className="ss-detail-title">{room.name || `Room ${room.room_iban}`}</h1>
               <p className="ss-detail-subtitle">
-                Detail priestoru, platby, nákupy a pripomienky v rovnakom štýle ako zvyšok bank shellu.
+                Detail priestoru, platby a nákupy v rovnakom štýle ako zvyšok bank shellu.
               </p>
             </div>
 
@@ -735,11 +779,9 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
               </span>
             </div>
             <div className="ss-kpi-card">
-              <span className="ss-kpi-label">PRIPOMIENKY / NÁKUPY</span>
-              <strong className="ss-kpi-value">
-                {incompleteReminders} / {(room.checks || []).length}
-              </strong>
-              <span className="ss-detail-kpi-note">otvorené / bloky</span>
+              <span className="ss-kpi-label">NÁKUPY</span>
+              <strong className="ss-kpi-value">{(room.checks || []).length}</strong>
+              <span className="ss-detail-kpi-note">bloky v priestore</span>
             </div>
           </div>
         </div>
@@ -768,13 +810,6 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
               onClick={() => setTab('shopping')}
             >
               Nákupy
-            </button>
-            <button
-              type="button"
-              className={tab === 'reminders' ? 'is-active' : ''}
-              onClick={() => setTab('reminders')}
-            >
-              Pripomienky
             </button>
             <button
               type="button"
@@ -897,134 +932,144 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
 
         {tab === 'shopping' && (
           <div className="ss-detail-panel-body">
-            <div className="ss-detail-toolbar-row">
-              <button className="ss-open-room" type="button" onClick={() => setShowAddCheck(!showAddCheck)}>
-                {showAddCheck ? 'Zrušiť' : '+ Pridať nákup'}
-              </button>
-              <input
-                type="file"
-                accept="image/*"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={handleFileUpload}
-              />
-              <button
-                className="ss-kpi-cta ss-detail-submit"
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={parsingReceipt}
-              >
-                {parsingReceipt ? 'Skenujem blok...' : 'Naskenovať blok'}
-              </button>
+            <div className="ss-shopping-workflow">
+              <div className="ss-shopping-workflow-copy">
+                <h3 className="ss-shopping-heading">Nákupy a účtenky</h3>
+                <p className="ss-shopping-description">
+                  Nahraj účtenku alebo pridaj nákup ručne. Potom len vyber, komu patrí jednotlivá položka.
+                </p>
+                <div className="ss-shopping-inline-meta">
+                  <span>{(room.checks || []).length} nákupy</span>
+                  <span>{totalShoppingItems} položiek</span>
+                  <span>{unassignedShoppingItems} čaká na priradenie</span>
+                </div>
+              </div>
+
+              <div className="ss-shopping-action-stack">
+                <div className="ss-shopping-action-row">
+                  <button className="ss-open-room" type="button" onClick={() => setShowAddCheck(!showAddCheck)}>
+                    {showAddCheck ? 'Zrušiť manuálne pridanie' : '+ Pridať nákup'}
+                  </button>
+                </div>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleFileUpload}
+                />
+
+                <div
+                  className={`ss-shopping-dropzone ${isReceiptDragActive ? 'is-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsReceiptDragActive(true);
+                  }}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setIsReceiptDragActive(true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    setIsReceiptDragActive(false);
+                  }}
+                  onDrop={async (event) => {
+                    event.preventDefault();
+                    setIsReceiptDragActive(false);
+                    await processReceiptFile(event.dataTransfer.files?.[0]);
+                  }}
+                >
+                  <span className="ss-shopping-dropzone-icon" aria-hidden="true">⌁</span>
+                  <div className="ss-shopping-dropzone-copy">
+                    <strong>Skenovať účtenku</strong>
+                    <span>Pretiahni ju sem alebo klikni pre upload.</span>
+                  </div>
+                  <span className={`ss-shopping-dropzone-state ${parsingReceipt ? 'is-loading' : ''}`}>
+                    {parsingReceipt ? 'OCR spracovanie...' : 'OCR'}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {showAddCheck && (
-              <div className="ss-detail-inline-form">
-                <input
-                  className="ss-input"
-                  value={checkLocation}
-                  onChange={(e) => setCheckLocation(e.target.value)}
-                  placeholder="Miesto nákupu"
-                />
-                <input
-                  className="ss-input"
-                  type="number"
-                  value={checkAmount}
-                  onChange={(e) => setCheckAmount(e.target.value)}
-                  placeholder="Suma (EUR)"
-                />
-                <button
-                  className="ss-kpi-cta ss-detail-submit"
-                  onClick={handleAddCheck}
-                  disabled={!checkAmount || !checkLocation}
-                >
-                  Uložiť nákup
-                </button>
+              <div className="ss-shopping-manual-card">
+                <div className="ss-shopping-manual-head">
+                  <div>
+                    <strong>Manuálne pridanie nákupu</strong>
+                    <span>Vytvor nákup a položky doplníš alebo priradíš členom hneď potom.</span>
+                  </div>
+                </div>
+                <div className="ss-shopping-manual-form">
+                  <input
+                    className="ss-input"
+                    value={checkLocation}
+                    onChange={(e) => setCheckLocation(e.target.value)}
+                    placeholder="Miesto nákupu"
+                  />
+                  <input
+                    className="ss-input"
+                    type="number"
+                    value={checkAmount}
+                    onChange={(e) => setCheckAmount(e.target.value)}
+                    placeholder="Suma (EUR)"
+                  />
+                  <button
+                    className="ss-kpi-cta ss-detail-submit"
+                    onClick={handleAddCheck}
+                    disabled={!checkAmount || !checkLocation}
+                  >
+                    Uložiť nákup
+                  </button>
+                </div>
               </div>
             )}
 
-            <div className="ss-detail-card-list">
-              {(room.checks || []).length === 0 && <div className="ss-room-empty">Žiadne nákupy.</div>}
+            <div className="ss-shopping-card-list">
+              {(room.checks || []).length === 0 && (
+                <div className="ss-shopping-empty-state">
+                  <strong>Zatiaľ tu nie sú žiadne nákupy</strong>
+                  <span>Začni manuálnym pridaním alebo nahraj prvú účtenku a systém pripraví položky na rozdelenie.</span>
+                </div>
+              )}
               {(room.checks || []).map((chk) => (
-                <div key={chk.id} className="ss-detail-block-card">
-                  <div className="ss-detail-block-head">
-                    <div>
-                      <strong>{chk.location}</strong>
-                      <span>{formatShortDate(chk.created_at)}</span>
+                <div key={chk.id} className="ss-shopping-card">
+                  <div className="ss-shopping-card-head">
+                    <div className="ss-shopping-card-main">
+                      <div className="ss-shopping-store-line">
+                        <strong className="ss-shopping-store">{chk.location}</strong>
+                      </div>
+
+                      <div className="ss-shopping-card-meta">
+                        <span>{formatShortDate(chk.created_at)}</span>
+                        <span>{(chk.items || []).length} položiek</span>
+                        <span>
+                          {(chk.items || []).filter((item) => !item.user_iban).length > 0
+                            ? `${(chk.items || []).filter((item) => !item.user_iban).length} nepriradené`
+                            : 'Rozdelené'}
+                        </span>
+                      </div>
                     </div>
-                    <strong className="is-positive">{formatAmount(chk.amount)} EUR</strong>
-                  </div>
 
-                  <div className="ss-detail-items">
-                    {(chk.items || []).map((item) => {
-                      const claimedUser = item.user_iban
-                        ? users.find((u) => u.user_iban === item.user_iban)
-                        : null;
-                      const isMine = item.user_iban === currentUserIban;
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="ss-detail-item-row"
-                          style={{
-                            cursor: 'pointer',
-                            padding: '8px 10px',
-                            borderRadius: 8,
-                            background: isMine ? 'rgba(0, 151, 230, 0.12)' : 'rgba(255,255,255,0.01)',
-                          }}
-                          onClick={async () => {
-                            await toggleCheckItemClaim(item.id, currentUserIban, item.user_iban);
-                            await onRefresh();
-                          }}
-                        >
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              minWidth: 0,
-                            }}
-                          >
-                            <span
-                              className="tb-avatar"
-                              style={{
-                                width: 18,
-                                minWidth: 18,
-                                height: 18,
-                                fontSize: 10,
-                                background: claimedUser ? 'var(--tb-blue)' : 'rgba(255,255,255,0.14)',
-                                color: '#fff',
-                              }}
-                            >
-                              {claimedUser ? getInitial(claimedUser.name || claimedUser.user_iban) : ''}
-                            </span>
-                            <span>{item.name}</span>
-                          </span>
-                          <span style={{ color: isMine ? '#ffffff' : '#c8cacf' }}>
-                            {formatAmount(item.amount)} EUR
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="ss-detail-add-item-row">
-                    <input className="ss-input" placeholder="Nová položka..." id={`item-name-${chk.id}`} />
-                    <input className="ss-input ss-detail-small-input" type="number" placeholder="Suma" id={`item-amt-${chk.id}`} />
-                    <button
-                      className="ss-open-room"
-                      onClick={async () => {
-                        const nameInput = document.getElementById(`item-name-${chk.id}`);
-                        const amtInput = document.getElementById(`item-amt-${chk.id}`);
-                        if (!nameInput?.value || !amtInput?.value) return;
-                        await addCheckItem(chk.id, nameInput.value, parseFloat(amtInput.value), currentUserIban);
-                        nameInput.value = '';
-                        amtInput.value = '';
-                        onRefresh();
-                      }}
-                    >
-                      +
-                    </button>
+                    <div className="ss-shopping-card-side">
+                      <strong className="ss-shopping-total">{formatAmount(chk.amount)} EUR</strong>
+                      <button
+                        className="ss-shopping-toggle"
+                        type="button"
+                        onClick={() => setActiveCheckId(chk.id)}
+                      >
+                        Detail
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1032,42 +1077,20 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
           </div>
         )}
 
-        {tab === 'reminders' && (
-          <div className="ss-detail-panel-body">
-            <div className="ss-detail-inline-form">
-              <input
-                className="ss-input"
-                placeholder="Napíš pripomienku..."
-                value={reminderText}
-                onChange={(e) => setReminderText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddReminder(e);
-                }}
-              />
-              <button className="ss-kpi-cta ss-detail-submit" onClick={handleAddReminder}>
-                Pridať
-              </button>
-            </div>
-
-            <div className="ss-detail-reminder-list">
-              {(room.reminders || []).length === 0 && <div className="ss-room-empty">Žiadne pripomienky.</div>}
-              {(room.reminders || []).map((rem) => (
-                <button
-                  key={rem.id}
-                  type="button"
-                  className={`ss-detail-reminder-row ${rem.is_completed ? 'is-completed' : ''}`}
-                  onClick={() => handleToggleReminder(rem)}
-                >
-                  <span className={`ss-detail-reminder-check ${rem.is_completed ? 'is-completed' : ''}`}>
-                    {rem.is_completed ? '✓' : ''}
-                  </span>
-                  <span>{rem.message}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </section>
+
+      {activeCheck && (
+        <ShoppingCheckModal
+          check={activeCheck}
+          room={room}
+          users={users}
+          draftItem={draftItems[activeCheck.id] || { name: '', amount: '' }}
+          onClose={() => setActiveCheckId(null)}
+          onUpdateDraftItem={updateDraftItem}
+          onAddDraftItem={handleAddDraftItem}
+          onAssignItem={handleAssignCheckItem}
+        />
+      )}
 
       {showAddMember && (
         <AddMemberModal 
@@ -1080,6 +1103,149 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
       {showInviteModal && (
         <InviteModal room={room} onClose={() => setShowInviteModal(false)} />
       )}
+    </div>
+  );
+}
+
+function ShoppingCheckModal({
+  check,
+  room,
+  users,
+  draftItem,
+  onClose,
+  onUpdateDraftItem,
+  onAddDraftItem,
+  onAssignItem,
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="ss-modal-backdrop" onClick={onClose}>
+      <div
+        className="ss-modal ss-shopping-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`shopping-check-title-${check.id}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="ss-modal-header ss-shopping-modal-header">
+          <div>
+            <h2 id={`shopping-check-title-${check.id}`}>{check.location}</h2>
+            <p className="ss-shopping-modal-subtitle">
+              {formatShortDate(check.created_at)} · {(check.items || []).length} položiek · {formatAmount(check.amount)} EUR
+            </p>
+          </div>
+          <button className="ss-close-btn" type="button" onClick={onClose} aria-label="Zavrieť detail nákupu">×</button>
+        </div>
+
+        <div className="ss-modal-body ss-shopping-modal-body">
+          <div className="ss-shopping-items">
+            {(check.items || []).length === 0 && (
+              <div className="ss-shopping-empty-items">
+                <strong>Zatiaľ bez položiek</strong>
+                <span>Pridaj ich ručne alebo nahraj účtenku s rozpisom.</span>
+              </div>
+            )}
+
+            {(check.items || []).map((item) => {
+              const claimedUser = item.user_iban
+                ? users.find((u) => u.user_iban === item.user_iban)
+                : null;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`ss-shopping-item ${claimedUser ? 'is-assigned' : 'is-unassigned'}`}
+                >
+                  <div className="ss-shopping-item-top">
+                    <div className="ss-shopping-item-main">
+                      <strong className="ss-shopping-item-name">{item.name}</strong>
+                      <div className="ss-shopping-item-state">
+                        <span className={`ss-shopping-status-pill ${claimedUser ? 'is-success' : 'is-warning'}`}>
+                          {claimedUser ? `Priradené: ${claimedUser.name}` : 'Nepriradené'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <strong className="ss-shopping-item-amount">{formatAmount(item.amount)} EUR</strong>
+                  </div>
+
+                  <div className="ss-shopping-assignment-row">
+                    <span className="ss-shopping-assignment-label">Kto platí</span>
+                    <div className="ss-shopping-assignees">
+                      <button
+                        type="button"
+                        className={`ss-shopping-assignee ss-shopping-assignee-neutral ${!item.user_iban ? 'is-active is-warning' : ''}`}
+                        onClick={() => onAssignItem(item, null)}
+                      >
+                        Nepriradené
+                      </button>
+
+                      {room.members.map((member) => {
+                        const isAssigned = item.user_iban === member.user_iban;
+                        return (
+                          <button
+                            key={member.user_iban}
+                            type="button"
+                            className={`ss-shopping-assignee ${isAssigned ? 'is-active' : ''}`}
+                            onClick={() => onAssignItem(item, member.user_iban)}
+                          >
+                            <span className="tb-avatar" style={{ background: member.color }}>
+                              {member.avatar}
+                            </span>
+                            <span className="ss-shopping-assignee-name">
+                              {(member.name || member.user_iban).split(' ')[0]}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="ss-shopping-inline-add ss-shopping-inline-add-modal">
+            <div className="ss-shopping-inline-add-copy">
+              <strong>Pridať položku</strong>
+              <span>Ak OCR niečo vynechal, doplň názov a sumu ručne.</span>
+            </div>
+            <div className="ss-shopping-inline-add-form">
+              <input
+                className="ss-input"
+                placeholder="Názov položky..."
+                value={draftItem.name || ''}
+                onChange={(event) => onUpdateDraftItem(check.id, 'name', event.target.value)}
+              />
+              <input
+                className="ss-input ss-detail-small-input"
+                type="number"
+                placeholder="Suma"
+                value={draftItem.amount || ''}
+                onChange={(event) => onUpdateDraftItem(check.id, 'amount', event.target.value)}
+              />
+              <button
+                className="ss-open-room"
+                type="button"
+                onClick={() => onAddDraftItem(check.id)}
+                disabled={!draftItem.name || !draftItem.amount}
+              >
+                Pridať
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1538,8 +1704,7 @@ export default function SharedSpacesWebPage() {
               <span>STAV</span>
               <span>AKTIVITA</span>
               <span>ZOSTATOK</span>
-              <span />
-              <span />
+              <span>AKCIA</span>
             </div>
 
             {filteredRooms.length === 0 && (
@@ -1598,12 +1763,6 @@ export default function SharedSpacesWebPage() {
                     Zobraziť
                   </button>
                 </div>
-
-                <div className="ss-room-menu-cell">
-                  <button className="ss-kebab" type="button" aria-label="Ďalšie možnosti">
-                    ⋮
-                  </button>
-                </div>
               </div>
             ))}
           </div>
@@ -1623,7 +1782,6 @@ export default function SharedSpacesWebPage() {
               <span>PRIESTOR</span>
               <span>POPIS</span>
               <span>SUMA</span>
-              <span />
             </div>
 
             {activityRows.length === 0 && (
@@ -1639,9 +1797,6 @@ export default function SharedSpacesWebPage() {
                   {item.isPositive ? '+' : '-'}
                   {formatAmount(item.amount)} EUR
                 </strong>
-                <button className="ss-activity-info" type="button" aria-label="Detail aktivity">
-                  i
-                </button>
               </div>
             ))}
           </div>

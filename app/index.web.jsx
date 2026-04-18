@@ -87,7 +87,13 @@ function Sidebar() {
         {sideItems.map((item, index) => (
           <a
             key={item}
-            href={`#${item}`}
+            href={item === 'Prehľad' ? '/' : `#${item}`}
+            onClick={(event) => {
+              if (item === 'Prehľad') {
+                event.preventDefault();
+                router.push('/');
+              }
+            }}
             className={`${index === 0 ? 'is-active' : ''} ${item === 'Účty' ? 'has-dot' : ''}`}
           >
             {item}
@@ -104,7 +110,13 @@ function TabletSubNav() {
       {subItems.map((item, index) => (
         <a
           key={item}
-          href={`#${item}`}
+          href={item === 'Prehľad' ? '/' : `#${item}`}
+          onClick={(event) => {
+            if (item === 'Prehľad') {
+              event.preventDefault();
+              router.push('/');
+            }
+          }}
           className={`${index === 0 ? 'is-active' : ''} ${item === 'Účty' ? 'has-dot' : ''}`}
         >
           {item}
