@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Tatra Shared Spaces Setup",
+    "slug": "tatra-shared-spaces-mvp",
+    "version": "1.0.0",
+    "orientation": "default",
+    "scheme": "tatrashared",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "android": {
+      "package": "com.hackathon.tatrasharedspaces"
+    },
+    "ios": {
+      "bundleIdentifier": "com.hackathon.tatrasharedspaces"
+    }
+  }
+}
