@@ -47,9 +47,7 @@ select {
 .tb-shell {
   position: relative;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 62% 18%, rgba(255, 255, 255, 0.018), transparent 32%),
-    linear-gradient(180deg, #191a1f 0%, #101116 78%);
+  background: var(--tb-bg);
   overflow-x: hidden;
 }
 
@@ -230,7 +228,7 @@ select {
   left: 0;
   width: var(--tb-sidebar);
   padding: 31px 0 0 58px;
-  background: linear-gradient(180deg, rgba(26,27,32,.86), rgba(17,18,23,.64));
+  background: #111216;
   border-right: 1px solid rgba(0,0,0,.26);
 }
 
@@ -798,8 +796,8 @@ select {
   height: 38px;
   border: 1px solid rgba(0, 151, 230, 0.55);
   border-radius: 4px;
-  background: linear-gradient(180deg, rgba(0, 151, 230, 0.22), rgba(0, 151, 230, 0.12));
-  color: #eefbff;
+  background: transparent;
+  color: var(--tb-blue);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: .03em;
@@ -868,14 +866,17 @@ select {
   }
 
   .tb-logout:hover {
-    background: #ff2d58;
+    background: transparent;
+    color: #ff2d58;
+    border-color: #ff2d58;
   }
 
   .tb-more:hover,
   .tb-shared-card-button:hover,
   .tb-shared-open:hover {
-    background: rgba(0, 151, 230, 0.95);
-    border-color: rgba(0, 151, 230, 0.95);
+    background: rgba(0, 151, 230, 0.1);
+    color: var(--tb-blue);
+    border-color: var(--tb-blue);
   }
 
   .tb-widget:hover {
@@ -1546,9 +1547,7 @@ select {
 .tb-shared-card {
   height: 272px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.02), transparent 52%),
-    linear-gradient(180deg, rgba(45, 47, 53, 0.42) 0%, rgba(36, 38, 43, 0.96) 28%, rgba(31, 33, 38, 1) 100%);
+  background: #1c1d21;
   border: 1px solid rgba(255, 255, 255, 0.03);
   transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease;
 }
@@ -1664,8 +1663,7 @@ select {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(0, 151, 230, 0.92) 0%, rgba(33, 170, 239, 0.86) 100%);
-  box-shadow: 0 0 8px rgba(0, 151, 230, 0.15);
+  background: rgba(0, 151, 230, 0.92);
 }
 
 .tb-shared-empty {
@@ -1697,7 +1695,7 @@ select {
   gap: 16px;
   padding: 0 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(31, 33, 38, 0.82);
+  background: #1a1c21;
 }
 
 .tb-shared-bottom-text {
@@ -1712,14 +1710,13 @@ select {
   padding: 0 18px;
   border: 1px solid rgba(0, 151, 230, 0.38);
   border-radius: 4px;
-  background: linear-gradient(180deg, rgba(0, 151, 230, 0.9) 0%, rgba(0, 151, 230, 0.72) 100%);
-  color: #ffffff;
+  background: transparent;
+  color: var(--tb-blue);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: .01em;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(0, 151, 230, 0.14);
-  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+  transition: transform .18s ease, background-color .18s ease;
 }
 
 /* responsive overrides for shared widget */
@@ -1778,11 +1775,9 @@ select {
   width: 100vw;
   min-height: 100vh;
   padding: 32px 24px 80px;
-  background:
-    radial-gradient(circle at 62% 12%, rgba(0, 151, 230, 0.03), transparent 40%),
-    linear-gradient(180deg, #191a1f 0%, #101116 78%);
+  background: var(--tb-bg, #111216);
   color: var(--tb-text, #f2f2f4);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
 }
 
 .ss-container {
@@ -2390,11 +2385,11 @@ select {
 }
 
 .ss-balance-bar.positive {
-  background: linear-gradient(90deg, rgba(0, 211, 154, 0.3), rgba(0, 211, 154, 0.6));
+  background: rgba(0, 211, 154, 0.6);
 }
 
 .ss-balance-bar.negative {
-  background: linear-gradient(90deg, rgba(240, 24, 71, 0.3), rgba(240, 24, 71, 0.6));
+  background: rgba(240, 24, 71, 0.6);
 }
 
 .ss-balance-amount {

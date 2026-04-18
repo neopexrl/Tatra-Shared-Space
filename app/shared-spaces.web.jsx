@@ -12,6 +12,13 @@ import {
   addRoomMember,
   getGoalsForRoom,
   createGoal,
+  getChecks,
+  getCheckListItems,
+  createCheck,
+  addCheckItem,
+  getReminders,
+  createReminder,
+  toggleReminder,
 } from '../src/setup/supabase';
 
 /* ─── constants ─── */
@@ -48,12 +55,24 @@ async function loadFullData() {
         };
       });
 
+      // get new data
+      const checks = await getChecks(room.room_iban);
+      const reminders = await getReminders(room.room_iban);
+      const enrichedChecks = await Promise.all(
+        checks.map(async (chk) => {
+          const items = await getCheckListItems(chk.id);
+          return { ...chk, items };
+        })
+      );
+
       return {
         ...room,
         members: enrichedMembers,
         transactions,
         memberCount: enrichedMembers.length,
         targetAmount: goals.length > 0 ? goals[0].amount : null,
+        checks: enrichedChecks,
+        reminders,
       };
     })
   );
@@ -133,6 +152,34 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [sendDirection, setSendDirection] = useState('to_room'); // 'to_room' or 'from_room'
   const [showAddMember, setShowAddMember] = useState(false);
 
+  const [showAddCheck, setShowAddCheck] = useState(false);
+  const [checkLocation, setCheckLocation] = useState('');
+  const [checkAmount, setCheckAmount] = useState('');
+  const [reminderText, setReminderText] = useState('');
+
+  const handleAddCheck = async (e) => {
+    e.preventDefault();
+    if (!checkLocation || !checkAmount) return;
+    await createCheck(room.room_iban, Number(checkAmount), checkLocation);
+    setCheckLocation('');
+    setCheckAmount('');
+    setShowAddCheck(false);
+    await onRefresh();
+  };
+
+  const handleAddReminder = async (e) => {
+    e.preventDefault();
+    if (!reminderText) return;
+    await createReminder(room.room_iban, currentUserIban, reminderText);
+    setReminderText('');
+    await onRefresh();
+  };
+
+  const handleToggleReminder = async (rem) => {
+    await toggleReminder(rem.id, !rem.is_completed);
+    await onRefresh();
+  };
+
   const handleSend = async () => {
     if (!sendAmount || Number(sendAmount) <= 0) return;
     setSending(true);
@@ -195,6 +242,20 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
         </button>
         <button
           type="button"
+          className={tab === 'shopping' ? 'is-active' : ''}
+          onClick={() => setTab('shopping')}
+        >
+          Nakupy
+        </button>
+        <button
+          type="button"
+          className={tab === 'reminders' ? 'is-active' : ''}
+          onClick={() => setTab('reminders')}
+        >
+          Pripomienky
+        </button>
+        <button
+          type="button"
           className={tab === 'send' ? 'is-active' : ''}
           onClick={() => setTab('send')}
         >
@@ -248,25 +309,12 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
         <div className="ss-tab-panel">
           <div className="ss-balance-chart">
             {room.members.map((m) => {
-              const maxBal = Math.max(...room.members.map((mm) => Math.abs(mm.userBalance || 0)), 1);
-              const pct = (Math.abs(m.userBalance || 0) / maxBal) * 100;
               return (
-                <div className="ss-balance-row" key={m.user_iban}>
+                <div className="ss-balance-row" key={m.user_iban} style={{ padding: '8px 0' }}>
                   <span className="tb-avatar" style={{ background: m.color }}>
                     {m.avatar}
                   </span>
-                  <span className="ss-balance-name">{m.name}</span>
-                  <div className="ss-balance-bar-wrap">
-                    <div
-                      className={`ss-balance-bar ${(m.userBalance || 0) >= 0 ? 'positive' : 'negative'}`}
-                      style={{ width: `${Math.max(pct, 4)}%` }}
-                    />
-                  </div>
-                  <span
-                    className={`ss-balance-amount ${(m.userBalance || 0) >= 0 ? 'positive' : 'negative'}`}
-                  >
-                    {formatAmount(m.userBalance || 0)} EUR
-                  </span>
+                  <span className="ss-balance-name" style={{ flex: 1, fontSize: '16px' }}>{m.name}</span>
                 </div>
               );
             })}
@@ -321,6 +369,100 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
             >
               {sending ? 'Spracovavam...' : 'Potvrdit platbu'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* shopping tab */}
+      {tab === 'shopping' && (
+        <div className="ss-tab-panel">
+          <div style={{ marginBottom: 16 }}>
+            <button className="ss-btn ss-btn-secondary" onClick={() => setShowAddCheck(!showAddCheck)} style={{ width: '100%' }}>
+              {showAddCheck ? 'Zrusit' : '+ Pridat nakup'}
+            </button>
+          </div>
+          {showAddCheck && (
+            <div className="ss-add-expense-form" style={{ marginBottom: 20 }}>
+              <label className="ss-label">Miesto nakupu (Obchod)</label>
+              <input className="ss-input" value={checkLocation} onChange={e => setCheckLocation(e.target.value)} placeholder="Tesco, Billa..." />
+              <label className="ss-label">Suma (EUR)</label>
+              <input className="ss-input" type="number" value={checkAmount} onChange={e => setCheckAmount(e.target.value)} placeholder="0.00" />
+              <button className="ss-btn ss-btn-primary" onClick={handleAddCheck} style={{ width: '100%', marginTop: 8 }} disabled={!checkAmount || !checkLocation}>
+                Ulozit nakup
+              </button>
+            </div>
+          )}
+          <div className="ss-expense-list">
+            {(room.checks || []).length === 0 && <div className="ss-empty">Ziadne nakupy.</div>}
+            {(room.checks || []).map(chk => (
+              <div key={chk.id} style={{ background: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: 8, marginBottom: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <strong style={{ color: '#fff' }}>{chk.location}</strong>
+                  <strong style={{ color: 'var(--tb-green)' }}>{formatAmount(chk.amount)} EUR</strong>
+                </div>
+                <div style={{ paddingLeft: 12, borderLeft: '2px solid rgba(255,255,255,0.1)' }}>
+                  {(chk.items || []).map(item => (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#aaa', marginTop: 4 }}>
+                      <span>{item.name}</span>
+                      <span>{formatAmount(item.amount)} EUR</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                    <input className="ss-input" placeholder="Nova polozka..." id={`item-name-${chk.id}`} style={{ padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
+                    <input className="ss-input" type="number" placeholder="Suma" id={`item-amt-${chk.id}`} style={{ width: 80, padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
+                    <button className="ss-btn ss-btn-secondary" style={{ padding: '4px 12px', minHeight: 'unset', fontSize: 13 }} onClick={async () => {
+                      const nameInput = document.getElementById(`item-name-${chk.id}`);
+                      const amtInput = document.getElementById(`item-amt-${chk.id}`);
+                      if (!nameInput.value || !amtInput.value) return;
+                      await addCheckItem(chk.id, nameInput.value, parseFloat(amtInput.value), currentUserIban);
+                      nameInput.value = '';
+                      amtInput.value = '';
+                      onRefresh();
+                    }}>+</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* reminders tab */}
+      {tab === 'reminders' && (
+        <div className="ss-tab-panel">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <input 
+              className="ss-input" 
+              placeholder="Napis pripomienku..." 
+              value={reminderText}
+              onChange={e => setReminderText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddReminder(e); }}
+            />
+            <button className="ss-btn ss-btn-primary" onClick={handleAddReminder}>Pridat</button>
+          </div>
+          <div className="ss-expense-list">
+            {(room.reminders || []).length === 0 && <div className="ss-empty">Ziadne pripomienky.</div>}
+            {(room.reminders || []).map(rem => (
+              <div 
+                key={rem.id} 
+                style={{ 
+                  display: 'flex', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', 
+                  borderRadius: 8, marginBottom: 8, cursor: 'pointer', opacity: rem.is_completed ? 0.5 : 1
+                }}
+                onClick={() => handleToggleReminder(rem)}
+              >
+                <div style={{ 
+                  width: 18, height: 18, borderRadius: 4, border: '2px solid var(--tb-blue)', 
+                  marginRight: 12, background: rem.is_completed ? 'var(--tb-blue)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {rem.is_completed && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
+                </div>
+                <span style={{ color: '#fff', textDecoration: rem.is_completed ? 'line-through' : 'none' }}>
+                  {rem.message}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -545,9 +687,10 @@ export default function SharedSpacesWebPage() {
     );
   }
 
-  const totalBalance = data.rooms.reduce((a, r) => a + (r.balance || 0), 0);
+  const currentUser = data.users?.[0];
+  const currentUserIban = currentUser?.user_iban;
+  const totalBalance = currentUser?.balance || 0;
   const totalTransactions = data.rooms.reduce((a, r) => a + r.transactions.length, 0);
-  const currentUserIban = data.users?.[0]?.user_iban;
 
   return (
     <div className="ss-page">

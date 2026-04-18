@@ -200,3 +200,84 @@ export async function sendFromRoom(roomIban, userIban, amount) {
 
   return tx;
 }
+
+/* ─── check lists (shopping trips) ─── */
+export async function getChecks(roomIban) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('checks')
+    .select('*')
+    .eq('room_iban', roomIban)
+    .order('id', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function createCheck(roomIban, amount, location, photo = null) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('checks')
+    .insert({ room_iban: roomIban, amount, location, photo })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getCheckListItems(checkId) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('check_list')
+    .select('*')
+    .eq('check_id', checkId)
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function addCheckItem(checkId, name, amount, userIban) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('check_list')
+    .insert({ check_id: checkId, name, amount, user_iban: userIban })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/* ─── reminders ─── */
+export async function getReminders(roomIban) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('reminders')
+    .select('*')
+    .eq('room_iban', roomIban)
+    .order('created_at', { ascending: false });
+    
+  if (error && error.code !== '42P01') throw error;
+  return data || [];
+}
+
+export async function createReminder(roomIban, userIban, message) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('reminders')
+    .insert({ room_iban: roomIban, user_iban: userIban, message })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function toggleReminder(reminderId, isCompleted) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('reminders')
+    .update({ is_completed: isCompleted })
+    .eq('id', reminderId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
