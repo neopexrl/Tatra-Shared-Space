@@ -33,9 +33,7 @@ const subItems = [
 function Logo() {
   return (
     <div className="tb-logo" aria-label="Tatra banka demo logo">
-      <span />
-      <span />
-      <span />
+      <img src="/mock-shell/images.png" alt="" />
     </div>
   );
 }
