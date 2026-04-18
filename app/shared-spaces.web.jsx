@@ -118,6 +118,31 @@ function getFallbackRoomCover(roomIban) {
   return ROOM_COVER_FALLBACKS[index];
 }
 
+const INVITE_TOKEN_SECRET = 'tatra_shared_spaces_invite_secret';
+
+function createInviteToken(roomIban) {
+  const payload = `${roomIban}:${hashString(`${roomIban}${INVITE_TOKEN_SECRET}`)}`;
+  return typeof window !== 'undefined' ? window.btoa(payload) : '';
+}
+
+function parseInviteToken(token) {
+  if (!token || typeof window === 'undefined') return null;
+  try {
+    const decoded = window.atob(token);
+    const [roomIban, signature] = decoded.split(':');
+    if (!roomIban || !signature) return null;
+    const expected = String(hashString(`${roomIban}${INVITE_TOKEN_SECRET}`));
+    return signature === expected ? roomIban : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function buildInviteUrl(roomIban) {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(createInviteToken(roomIban))}`;
+}
+
 async function fetchUnsplashRoomCover() {
   if (!UNSPLASH_ACCESS_KEY || typeof fetch === 'undefined') return null;
 
@@ -351,6 +376,138 @@ function ErrorState({ message, onRetry }) {
   );
 }
 
+function InviteAcceptancePage({ room, users, inviteUrl, inviteError, onAccept, onCancel }) {
+  const availableUsers = users.filter((user) => !room.members.some((member) => member.user_iban === user.user_iban));
+  const [selectedUser, setSelectedUser] = useState(availableUsers[0]?.user_iban || '');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (availableUsers.length > 0 && !selectedUser) {
+      setSelectedUser(availableUsers[0].user_iban);
+    }
+  }, [availableUsers, selectedUser]);
+
+  const handleAccept = async () => {
+    if (!selectedUser) return;
+    setLoading(true);
+    try {
+      await addRoomMember(room.room_iban, selectedUser);
+      await onAccept(selectedUser);
+    } catch (err) {
+      console.error('Failed to accept invite', err);
+      alert('Chyba pri akceptácií pozvánky: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="ss-dashboard">
+      <BackHeader title="Pozvánka do priestoru" onBack={onCancel} />
+      <div className="ss-empty" style={{ padding: 32, textAlign: 'left' }}>
+        {inviteError ? (
+          <div style={{ color: '#ff8fa0', marginBottom: 24 }}>{inviteError}</div>
+        ) : (
+          <>
+            <p style={{ color: '#d4d7dc', marginBottom: 16 }}>
+              Otvorili ste pozvánku do priestoru <strong>{room.name || room.room_iban}</strong>.
+              Vyberte účet, ktorý chcete použiť na prihlásenie a pripojenie do priestoru.
+            </p>
+            <div className="ss-modal-body" style={{ padding: 24, background: '#1f2128', borderRadius: 16 }}>
+              <label className="ss-label" style={{ marginBottom: 12 }}>Vyberte účet</label>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+                {availableUsers.map((user) => (
+                  <button
+                    key={user.user_iban}
+                    type="button"
+                    className={`ss-btn ${selectedUser === user.user_iban ? 'ss-btn-primary' : ''}`}
+                    style={{ justifyContent: 'flex-start' }}
+                    onClick={() => setSelectedUser(user.user_iban)}
+                  >
+                    {user.name || user.user_iban}
+                  </button>
+                ))}
+                {availableUsers.length === 0 && (
+                  <div className="ss-empty" style={{ padding: 16 }}>
+                    Všetci používatelia sú už v tomto priestore.
+                  </div>
+                )}
+              </div>
+              {inviteUrl && (
+                <div style={{ marginBottom: 16 }}>
+                  <label className="ss-label">Pozvánka</label>
+                  <div style={{ color: '#bfc1c8', wordBreak: 'break-all', fontSize: 13, background: '#101214', padding: 12, borderRadius: 10 }}>{inviteUrl}</div>
+                </div>
+              )}
+              <button
+                className="ss-btn ss-btn-primary"
+                type="button"
+                onClick={handleAccept}
+                disabled={!selectedUser || loading || availableUsers.length === 0}
+              >
+                {loading ? 'Prijímam...' : 'Prijať pozvánku'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InviteModal({ room, onClose }) {
+  const inviteUrl = buildInviteUrl(room.room_iban);
+  const [copied, setCopied] = useState(false);
+  const qrSrc = inviteUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(inviteUrl)}`
+    : '';
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Clipboard error', err);
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="ss-modal-backdrop" onClick={onClose}>
+      <div className="ss-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ss-modal-header">
+          <h2>Pozvánka do priestoru</h2>
+          <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
+        </div>
+        <div className="ss-modal-body">
+          <p style={{ color: '#bfc1c8', marginBottom: 12 }}>
+            Odkaz možno poslať komukoľvek. Prijímateľ si potom vyberie účet z existujúcich používateľov.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input
+                className="ss-input"
+                readOnly
+                value={inviteUrl}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <button className="ss-btn ss-btn-primary" type="button" onClick={handleCopy}>
+                {copied ? 'Skopírované' : 'Kopírovať'}
+              </button>
+            </div>
+            {qrSrc && (
+              <div style={{ display: 'grid', placeItems: 'center', gap: 10 }}>
+                <img src={qrSrc} alt="QR kód pozvánky" style={{ width: 220, height: 220, borderRadius: 14, background: '#111' }} />
+                <small style={{ color: '#8a8c92' }}>Naskenujte QR kód na priamu pozvánku.</small>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatShortDate(value) {
   if (!value) return 'Bez dátumu';
   const date = new Date(value);
@@ -397,6 +554,7 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [sendAmount, setSendAmount] = useState('');
   const [sendDirection, setSendDirection] = useState('to_room'); // 'to_room' or 'from_room'
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [coverPhoto, setCoverPhoto] = useState(null);
 
   const [showAddCheck, setShowAddCheck] = useState(false);
@@ -534,6 +692,9 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
             </div>
 
             <div className="ss-detail-actions">
+              <button className="ss-invite-btn" type="button" onClick={() => setShowInviteModal(true)}>
+                Zdieľať pozvánku
+              </button>
               <button className="ss-open-room" type="button" onClick={() => setShowAddMember(true)}>
                 Pozvať člena
               </button>
@@ -916,6 +1077,9 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
           onAdded={onRefresh} 
         />
       )}
+      {showInviteModal && (
+        <InviteModal room={room} onClose={() => setShowInviteModal(false)} />
+      )}
     </div>
   );
 }
@@ -1083,6 +1247,9 @@ export default function SharedSpacesWebPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [filterTab, setFilterTab] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
+  const [inviteToken, setInviteToken] = useState(null);
+  const [inviteRoomIban, setInviteRoomIban] = useState(null);
+  const [inviteError, setInviteError] = useState(null);
 
   const fetchData = useCallback(async () => {
     setError(null);
@@ -1101,7 +1268,31 @@ export default function SharedSpacesWebPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const inviteParam = params.get('invite');
+
+    if (!inviteParam) return;
+    const roomIban = parseInviteToken(inviteParam);
+
+    setInviteToken(inviteParam);
+
+    if (!roomIban) {
+      setInviteError('Neplatná alebo expirovaná pozvánka.');
+      return;
+    }
+
+    setInviteRoomIban(roomIban);
+  }, []);
+
   const selectedRoom = data?.rooms?.find((r) => r.room_iban === selectedRoomIban);
+  const inviteRoom = inviteRoomIban ? data?.rooms?.find((r) => r.room_iban === inviteRoomIban) : null;
+  const inviteUrl = inviteRoom ? buildInviteUrl(inviteRoom.room_iban) : '';
+  const inviteUsers = inviteRoom
+    ? data?.users?.filter((user) => !inviteRoom.members.some((member) => member.user_iban === user.user_iban))
+    : [];
+
   const usersByIban = useMemo(
     () => new Map((data?.users || []).map((user) => [user.user_iban, user])),
     [data]
@@ -1199,6 +1390,47 @@ export default function SharedSpacesWebPage() {
           <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
           <ErrorState message={error} onRetry={fetchData} />
         </div>
+      </SharedSpacesShell>
+    );
+  }
+
+  const onInviteCancel = () => {
+    setInviteToken(null);
+    setInviteRoomIban(null);
+    setInviteError(null);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  };
+
+  const handleInviteAccepted = async () => {
+    await fetchData();
+    setSelectedRoomIban(inviteRoom?.room_iban || null);
+    onInviteCancel();
+  };
+
+  if (inviteToken && !loading) {
+    if (inviteError || !inviteRoom) {
+      return (
+        <SharedSpacesShell>
+          <div className="ss-dashboard">
+            <BackHeader title="Pozvánka" onBack={onInviteCancel} />
+            <ErrorState message={inviteError || 'Pozvánka nebola nájdená.'} onRetry={onInviteCancel} />
+          </div>
+        </SharedSpacesShell>
+      );
+    }
+
+    return (
+      <SharedSpacesShell>
+        <InviteAcceptancePage
+          room={inviteRoom}
+          users={data?.users || []}
+          inviteUrl={inviteUrl}
+          inviteError={inviteError}
+          onAccept={handleInviteAccepted}
+          onCancel={onInviteCancel}
+        />
       </SharedSpacesShell>
     );
   }
