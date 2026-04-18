@@ -19,7 +19,10 @@ import {
   getReminders,
   createReminder,
   toggleReminder,
+  batchAddCheckItems,
+  toggleCheckItemClaim,
 } from '../src/setup/supabase';
+import { processDocumentBase64 } from '../src/utils/gemini-parser';
 
 /* ─── constants ─── */
 const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
@@ -283,6 +286,41 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [checkLocation, setCheckLocation] = useState('');
   const [checkAmount, setCheckAmount] = useState('');
   const [reminderText, setReminderText] = useState('');
+  const [parsingReceipt, setParsingReceipt] = useState(false);
+  const fileInputRef = React.useRef(null);
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParsingReceipt(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64String = reader.result.split(',')[1];
+          const result = await processDocumentBase64(file.type, base64String);
+          if (result.type !== 'receipt') {
+            alert('Nebol rozpoznany pokladnicny blok. Typ: ' + result.type);
+            return;
+          }
+          const check = await createCheck(room.room_iban, Number(result.total), result.store || 'Neznamy obchod');
+          if (result.items && result.items.length > 0) {
+            await batchAddCheckItems(check.id, result.items);
+          }
+          await onRefresh();
+        } catch (err) {
+          console.error(err);
+          alert('Chyba pri spracovani obrazka: ' + err.message);
+        } finally {
+          setParsingReceipt(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      setParsingReceipt(false);
+    }
+  };
 
   const handleAddCheck = async (e) => {
     e.preventDefault();
@@ -504,8 +542,12 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
       {tab === 'shopping' && (
         <div className="ss-tab-panel">
           <div style={{ marginBottom: 16 }}>
-            <button className="ss-btn ss-btn-secondary" onClick={() => setShowAddCheck(!showAddCheck)} style={{ width: '100%' }}>
-              {showAddCheck ? 'Zrusit' : '+ Pridat nakup'}
+            <button className="ss-btn ss-btn-secondary" onClick={() => setShowAddCheck(!showAddCheck)} style={{ width: '100%', marginBottom: 8 }}>
+              {showAddCheck ? 'Zrusit' : '+ Pridat nakup (Manualne)'}
+            </button>
+            <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
+            <button className="ss-btn ss-btn-primary" onClick={() => fileInputRef.current?.click()} style={{ width: '100%' }} disabled={parsingReceipt}>
+              {parsingReceipt ? 'OSKENOVAT BLOK (Spracovavam...)' : 'OSKENOVAT BLOK (FOTO)'}
             </button>
           </div>
           {showAddCheck && (
@@ -528,12 +570,35 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                   <strong style={{ color: 'var(--tb-green)' }}>{formatAmount(chk.amount)} EUR</strong>
                 </div>
                 <div style={{ paddingLeft: 12, borderLeft: '2px solid rgba(255,255,255,0.1)' }}>
-                  {(chk.items || []).map(item => (
-                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#aaa', marginTop: 4 }}>
-                      <span>{item.name}</span>
-                      <span>{formatAmount(item.amount)} EUR</span>
-                    </div>
-                  ))}
+                  {(chk.items || []).map(item => {
+                    const claimedUser = item.user_iban ? users.find(u => u.user_iban === item.user_iban) : null;
+                    const isMine = item.user_iban === currentUserIban;
+                    return (
+                      <div 
+                        key={item.id} 
+                        style={{ 
+                          display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#aaa', marginTop: 4, 
+                          cursor: 'pointer', padding: '4px 6px', background: isMine ? 'rgba(0,211,154,0.1)' : 'transparent', 
+                          borderRadius: 4, alignItems: 'center'
+                        }}
+                        onClick={async () => {
+                          await toggleCheckItemClaim(item.id, currentUserIban, item.user_iban);
+                          onRefresh();
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: isMine ? 1 : 0.8, color: isMine ? '#fff' : '#aaa' }}>
+                          <span style={{ 
+                            width: 16, height: 16, borderRadius: '50%', background: claimedUser ? 'var(--tb-blue)' : '#444', 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff' 
+                          }}>
+                            {claimedUser ? getInitial(claimedUser.name || claimedUser.user_iban) : ''}
+                          </span>
+                          {item.name}
+                        </span>
+                        <span style={{ color: isMine ? '#fff' : '#aaa' }}>{formatAmount(item.amount)} EUR</span>
+                      </div>
+                    );
+                  })}
                   <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                     <input className="ss-input" placeholder="Nova polozka..." id={`item-name-${chk.id}`} style={{ padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
                     <input className="ss-input" type="number" placeholder="Suma" id={`item-amt-${chk.id}`} style={{ width: 80, padding: '6px 10px', minHeight: 'unset', fontSize: 13 }} />
@@ -775,7 +840,6 @@ export default function SharedSpacesWebPage() {
   const [sortBy, setSortBy] = useState('latest');
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const result = await loadFullData();

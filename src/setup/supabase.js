@@ -246,6 +246,40 @@ export async function addCheckItem(checkId, name, amount, userIban) {
   return data;
 }
 
+export async function batchAddCheckItems(checkId, itemsJson = []) {
+  const client = requireSupabase();
+  const rows = itemsJson.map(item => ({
+    check_id: checkId,
+    name: item.name || 'Unknown',
+    amount: item.price || item.qty * (item.price || 0) || 0,
+    user_iban: null // initially unclaimed
+  }));
+  if (rows.length === 0) return [];
+
+  const { data, error } = await client
+    .from('check_list')
+    .insert(rows)
+    .select();
+  if (error) throw error;
+  return data;
+}
+
+export async function toggleCheckItemClaim(itemId, currentUserIban, itemCurrentUserIban) {
+  const client = requireSupabase();
+  // if it's already claimed by me, unclaim it. If claimed by someone else, overwrite it.
+  const newOwner = (itemCurrentUserIban === currentUserIban) ? null : currentUserIban;
+  
+  const { data, error } = await client
+    .from('check_list')
+    .update({ user_iban: newOwner })
+    .eq('id', itemId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+
 /* ─── reminders ─── */
 export async function getReminders(roomIban) {
   if (!supabase) return [];
