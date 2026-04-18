@@ -61,11 +61,18 @@ export async function getRoomBalance(roomIban) {
   return data.balance;
 }
 
-export async function createRoom(roomIban, name, balance = 0) {
+export async function createRoom(roomIban, name, balance = 0, createdByUserIban = null, mode = null) {
   const client = requireSupabase();
+  const row = { room_iban: roomIban, name, balance };
+  if (createdByUserIban) {
+    row.created_by_user_iban = createdByUserIban;
+  }
+  if (mode) {
+    row.mode = mode;
+  }
   const { data, error } = await client
     .from('rooms')
-    .insert({ room_iban: roomIban, name, balance })
+    .insert(row)
     .select()
     .single();
   if (error) throw error;

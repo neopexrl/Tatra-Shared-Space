@@ -20,6 +20,17 @@ import {
   toggleCheckItemClaim,
 } from '../src/setup/supabase';
 import { processDocumentBase64 } from '../src/utils/gemini-parser';
+import {
+  getNotificationsForUser,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '../src/setup/notifications';
+import {
+  createRoomInvite,
+  getPendingInvitesForUser,
+  acceptRoomInvite,
+  declineRoomInvite,
+} from '../src/setup/invites';
 
 /* ─── constants ─── */
 const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
@@ -1095,7 +1106,8 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
       {showAddMember && (
         <AddMemberModal 
           room={room} 
-          allUsers={users} 
+          allUsers={users}
+          currentUserIban={currentUserIban}
           onClose={() => setShowAddMember(false)} 
           onAdded={onRefresh} 
         />
@@ -1250,25 +1262,45 @@ function ShoppingCheckModal({
   );
 }
 
-function AddMemberModal({ room, allUsers, onClose, onAdded }) {
+function AddMemberModal({ room, allUsers, currentUserIban, onClose, onAdded }) {
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState([]);
+  const closeTimerRef = React.useRef(null);
+
+  // Clean up auto-close timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   // filter out users already in room
   const availableUsers = allUsers.filter(u => !room.members.some(m => m.user_iban === u.user_iban));
 
-  const handleAdd = async () => {
+  const handleInvite = async () => {
     if (selectedUserIds.length === 0) return;
     setLoading(true);
+    const newResults = [];
     try {
       for (const userId of selectedUserIds) {
-        await addRoomMember(room.room_iban, userId);
+        try {
+          await createRoomInvite(room.room_iban, userId, currentUserIban);
+          newResults.push({ userId, ok: true });
+        } catch (err) {
+          newResults.push({ userId, ok: false, error: err.message });
+        }
       }
-      await onAdded();
-      onClose();
+      setResults(newResults);
+      const anySuccess = newResults.some(r => r.ok);
+      if (anySuccess) {
+        await onAdded();
+      }
+      // Keep modal open briefly so user sees results, then auto-close
+      closeTimerRef.current = setTimeout(() => onClose(), 1500);
     } catch (err) {
-      console.error('Failed to add members', err);
-      alert('Chyba pri pridavani: ' + err.message);
+      console.error('Invite flow failed', err);
+    } finally {
       setLoading(false);
     }
   };
@@ -1289,22 +1321,34 @@ function AddMemberModal({ room, allUsers, onClose, onAdded }) {
           <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
         </div>
         <div className="ss-modal-body">
-          {availableUsers.length === 0 ? (
+          {results.length > 0 ? (
+            <div style={{ marginBottom: 16 }}>
+              {results.map((r, i) => {
+                const user = allUsers.find(u => u.user_iban === r.userId);
+                return (
+                  <div key={i} style={{ padding: 6, color: r.ok ? '#00d39a' : '#ff5b7a', fontSize: 13 }}>
+                    {user?.name || r.userId}: {r.ok ? 'Pozvanka odoslana ✓' : r.error}
+                  </div>
+                );
+              })}
+            </div>
+          ) : availableUsers.length === 0 ? (
             <div className="ss-empty">Vsetci pouzivatelia uz su v priestore.</div>
           ) : (
-            <div style={{ maxHeight: 200, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
-              {availableUsers.map(u => (
-                <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
-                  <input type="checkbox" checked={selectedUserIds.includes(u.user_iban)} onChange={() => toggleUser(u.user_iban)} />
-                  {u.name || u.user_iban}
-                </label>
-              ))}
-            </div>
+            <>
+              <div style={{ maxHeight: 200, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
+                {availableUsers.map(u => (
+                  <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
+                    <input type="checkbox" checked={selectedUserIds.includes(u.user_iban)} onChange={() => toggleUser(u.user_iban)} />
+                    {u.name || u.user_iban}
+                  </label>
+                ))}
+              </div>
+              <button className="ss-btn ss-btn-primary" type="button" style={{ width: '100%' }} disabled={selectedUserIds.length === 0 || loading} onClick={handleInvite}>
+                {loading ? 'Posielam pozvanky...' : 'Poslat pozvanky'}
+              </button>
+            </>
           )}
-
-          <button className="ss-btn ss-btn-primary" type="button" style={{ width: '100%' }} disabled={selectedUserIds.length === 0 || loading} onClick={handleAdd}>
-            {loading ? 'Pridavam...' : 'Pridat vybranych'}
-          </button>
         </div>
       </div>
     </div>
@@ -1324,12 +1368,18 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
     try {
       // create random IBAN
       const roomIban = `SK${Math.floor(10000000000000000000 + Math.random() * 90000000000000000000)}`;
-      await createRoom(roomIban, name, 0);
+      await createRoom(roomIban, name, 0, currentUserIban, type);
 
-      // add selected members (and the current user automatically)
-      const membersToAdd = [...new Set([currentUserIban, ...selectedUserIds])];
-      for (const userId of membersToAdd) {
-        await addRoomMember(roomIban, userId);
+      // add the creator directly as a member
+      await addRoomMember(roomIban, currentUserIban);
+
+      // invite selected users (not direct add)
+      for (const userId of selectedUserIds) {
+        try {
+          await createRoomInvite(roomIban, userId, currentUserIban);
+        } catch (err) {
+          console.warn(`Failed to invite ${userId}:`, err.message);
+        }
       }
 
       // add target sum if exists
@@ -1385,7 +1435,7 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
           <label className="ss-label">Cielova suma (nepovinne, v EUR)</label>
           <input className="ss-input" type="number" placeholder="napr. 500" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} style={{ marginBottom: 16 }} />
 
-          <label className="ss-label">Pozvat clenov z kontaktov</label>
+          <label className="ss-label">Pozvat clenov (dostanu pozvanku)</label>
           <div style={{ maxHeight: 150, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
             {allUsers && allUsers.filter(u => u.user_iban !== currentUserIban).map(u => (
               <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
@@ -1404,6 +1454,209 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
   );
 }
 
+/* ─── Notifications Panel ─── */
+function NotificationsPanel({ userIban, onClose }) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!userIban) return;
+    try {
+      const data = await getNotificationsForUser(userIban);
+      setNotifications(data || []);
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [userIban]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsRead(userIban);
+      await load();
+    } catch (err) {
+      console.error('Failed to mark all read:', err);
+    }
+  };
+
+  const handleMarkRead = async (id) => {
+    try {
+      await markNotificationRead(id);
+      await load();
+    } catch (err) {
+      console.error('Failed to mark read:', err);
+    }
+  };
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const typeIcons = {
+    room_invite: '✉',
+    room_member_joined: '👤',
+    goal_expiring_1h: '⏰',
+    room_expiring_1h: '⏰',
+  };
+
+  return (
+    <div className="ss-modal-backdrop" onClick={onClose}>
+      <div className="ss-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <div className="ss-modal-header">
+          <h2>Notifikacie {unreadCount > 0 && <span style={{ color: '#ff5b7a', fontSize: 14 }}>({unreadCount} neprecitanych)</span>}</h2>
+          <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
+        </div>
+        <div className="ss-modal-body" style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {unreadCount > 0 && (
+            <button className="ss-btn ss-btn-secondary" type="button" style={{ width: '100%', marginBottom: 12, fontSize: 12 }} onClick={handleMarkAllRead}>
+              Oznacit vsetky ako precitane
+            </button>
+          )}
+
+          {loading ? (
+            <div className="ss-empty">Nacitavam...</div>
+          ) : notifications.length === 0 ? (
+            <div className="ss-empty">Ziadne notifikacie.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {notifications.map(n => (
+                <div
+                  key={n.id}
+                  onClick={() => !n.is_read && handleMarkRead(n.id)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    background: n.is_read ? 'rgba(255,255,255,0.02)' : 'rgba(0,151,230,0.08)',
+                    borderLeft: n.is_read ? '3px solid transparent' : '3px solid #0097e6',
+                    cursor: n.is_read ? 'default' : 'pointer',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>{typeIcons[n.type] || '🔔'}</span>
+                    <strong style={{ color: '#fff', fontSize: 13, flex: 1 }}>{n.title}</strong>
+                    <span style={{ color: '#666', fontSize: 11 }}>
+                      {new Date(n.created_at).toLocaleString('sk-SK', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                    </span>
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 4, paddingLeft: 24 }}>{n.body}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Invites Panel ─── */
+function InvitesPanel({ userIban, onClose, onRefresh, onCountsChanged }) {
+  const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(null); // invite id being processed
+
+  const load = useCallback(async () => {
+    if (!userIban) return;
+    try {
+      const data = await getPendingInvitesForUser(userIban);
+      setInvites(data || []);
+    } catch (err) {
+      console.error('Failed to load invites:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [userIban]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAccept = async (inviteId) => {
+    setProcessing(inviteId);
+    try {
+      await acceptRoomInvite(inviteId);
+      await load();
+      await onRefresh();
+      if (onCountsChanged) await onCountsChanged();
+    } catch (err) {
+      console.error('Accept failed:', err);
+      alert('Chyba: ' + err.message);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleDecline = async (inviteId) => {
+    setProcessing(inviteId);
+    try {
+      await declineRoomInvite(inviteId);
+      await load();
+      if (onCountsChanged) await onCountsChanged();
+    } catch (err) {
+      console.error('Decline failed:', err);
+      alert('Chyba: ' + err.message);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  return (
+    <div className="ss-modal-backdrop" onClick={onClose}>
+      <div className="ss-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <div className="ss-modal-header">
+          <h2>Pozvanky ({invites.length})</h2>
+          <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
+        </div>
+        <div className="ss-modal-body" style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {loading ? (
+            <div className="ss-empty">Nacitavam...</div>
+          ) : invites.length === 0 ? (
+            <div className="ss-empty">Ziadne cakajuce pozvanky.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {invites.map(inv => (
+                <div key={inv.id} style={{
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}>
+                  <div style={{ color: '#fff', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+                    {inv.room_name || inv.room_iban}
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 10 }}>
+                    Pozval: {inv.inviter_name || inv.invited_by_user_iban}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="ss-btn ss-btn-primary"
+                      type="button"
+                      style={{ flex: 1, padding: '8px 0', fontSize: 13 }}
+                      disabled={processing === inv.id}
+                      onClick={() => handleAccept(inv.id)}
+                    >
+                      {processing === inv.id ? '...' : 'Prijat'}
+                    </button>
+                    <button
+                      className="ss-btn ss-btn-secondary"
+                      type="button"
+                      style={{ flex: 1, padding: '8px 0', fontSize: 13 }}
+                      disabled={processing === inv.id}
+                      onClick={() => handleDecline(inv.id)}
+                    >
+                      {processing === inv.id ? '...' : 'Odmietnut'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── main page ─── */
 export default function SharedSpacesWebPage() {
   const [data, setData] = useState(null);
@@ -1416,6 +1669,18 @@ export default function SharedSpacesWebPage() {
   const [inviteToken, setInviteToken] = useState(null);
   const [inviteRoomIban, setInviteRoomIban] = useState(null);
   const [inviteError, setInviteError] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showInvites, setShowInvites] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingInviteCount, setPendingInviteCount] = useState(0);
+  const [currentUserIban, setCurrentUserIban] = useState(() => {
+    try { return localStorage.getItem('tatra_current_user_iban') || null; } catch { return null; }
+  });
+
+  const handleUserSwitch = (iban) => {
+    setCurrentUserIban(iban);
+    try { localStorage.setItem('tatra_current_user_iban', iban); } catch { /* noop */ }
+  };
 
   const fetchData = useCallback(async () => {
     setError(null);
@@ -1452,12 +1717,39 @@ export default function SharedSpacesWebPage() {
     setInviteRoomIban(roomIban);
   }, []);
 
+  useEffect(() => {
+    if (!data?.users?.length) return;
+    const validIbans = data.users.map((u) => u.user_iban);
+    if (!currentUserIban || !validIbans.includes(currentUserIban)) {
+      handleUserSwitch(data.users[0].user_iban);
+    }
+  }, [data, currentUserIban]);
+
+  const refreshCounts = useCallback(async () => {
+    if (!currentUserIban) {
+      setUnreadCount(0);
+      setPendingInviteCount(0);
+      return;
+    }
+    try {
+      const [notifs, invites] = await Promise.all([
+        getNotificationsForUser(currentUserIban),
+        getPendingInvitesForUser(currentUserIban),
+      ]);
+      setUnreadCount((notifs || []).filter(n => !n.is_read).length);
+      setPendingInviteCount((invites || []).length);
+    } catch (err) {
+      console.error('Failed to load counts:', err);
+    }
+  }, [currentUserIban]);
+
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
+
   const selectedRoom = data?.rooms?.find((r) => r.room_iban === selectedRoomIban);
   const inviteRoom = inviteRoomIban ? data?.rooms?.find((r) => r.room_iban === inviteRoomIban) : null;
   const inviteUrl = inviteRoom ? buildInviteUrl(inviteRoom.room_iban) : '';
-  const inviteUsers = inviteRoom
-    ? data?.users?.filter((user) => !inviteRoom.members.some((member) => member.user_iban === user.user_iban))
-    : [];
 
   const usersByIban = useMemo(
     () => new Map((data?.users || []).map((user) => [user.user_iban, user])),
@@ -1569,7 +1861,10 @@ export default function SharedSpacesWebPage() {
     }
   };
 
-  const handleInviteAccepted = async () => {
+  const handleInviteAccepted = async (acceptedUserIban) => {
+    if (acceptedUserIban) {
+      handleUserSwitch(acceptedUserIban);
+    }
     await fetchData();
     setSelectedRoomIban(inviteRoom?.room_iban || null);
     onInviteCancel();
@@ -1601,13 +1896,20 @@ export default function SharedSpacesWebPage() {
     );
   }
 
-  const currentUser = data.users?.[0];
-  const currentUserIban = currentUser?.user_iban;
-  const totalBalance = roomModels.reduce((sum, room) => sum + room.balance, 0);
-  const activeSpaces = roomModels.filter((room) => room.isActive).length;
-  const closedSpaces = roomModels.length - activeSpaces;
-  const pendingSettlements = roomModels.filter((room) => room.hasPending).length;
-  const filteredRooms = [...roomModels]
+  const resolvedCurrentUserIban = (data?.users || []).some((user) => user.user_iban === currentUserIban)
+    ? currentUserIban
+    : data?.users?.[0]?.user_iban || null;
+  const myRoomModels = resolvedCurrentUserIban
+    ? roomModels.filter((room) => room.members.some((member) => member.user_iban === resolvedCurrentUserIban))
+    : roomModels;
+  const totalBalance = myRoomModels.reduce((sum, room) => sum + room.balance, 0);
+  const activeSpaces = myRoomModels.filter((room) => room.isActive).length;
+  const closedSpaces = myRoomModels.length - activeSpaces;
+  const pendingSettlements = myRoomModels.filter((room) => room.hasPending).length;
+  const visibleActivityRows = activityRows.filter((item) =>
+    myRoomModels.some((room) => room.room_iban === item.id.split('-')[0])
+  );
+  const filteredRooms = [...myRoomModels]
     .filter((room) => {
       if (filterTab === 'active') return room.isActive;
       if (filterTab === 'closed') return room.isClosed;
@@ -1630,9 +1932,48 @@ export default function SharedSpacesWebPage() {
             </button>
           </div>
         </div>
-        <button className="ss-dashboard-link" type="button" onClick={() => router.push('/')}>
-          Späť na prehľad
-        </button>
+        <div className="ss-dashboard-actions">
+          <label className="ss-dashboard-user-field">
+            <span>Účet</span>
+            <select
+              value={resolvedCurrentUserIban || ''}
+              onChange={(event) => handleUserSwitch(event.target.value)}
+            >
+              {(data?.users || []).map((user) => (
+                <option key={user.user_iban} value={user.user_iban}>
+                  {user.name || user.user_iban}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            className="ss-dashboard-utility-btn"
+            type="button"
+            onClick={() => setShowInvites(true)}
+          >
+            Pozvánky
+            {pendingInviteCount > 0 && (
+              <span className="ss-dashboard-utility-count">{pendingInviteCount}</span>
+            )}
+          </button>
+
+          <button
+            className="ss-dashboard-utility-btn ss-dashboard-utility-btn-icon"
+            type="button"
+            aria-label="Notifikácie"
+            onClick={() => setShowNotifications(true)}
+          >
+            <span aria-hidden="true">🔔</span>
+            {unreadCount > 0 && (
+              <span className="ss-dashboard-utility-count">{unreadCount}</span>
+            )}
+          </button>
+
+          <button className="ss-dashboard-link" type="button" onClick={() => router.push('/')}>
+            Späť na prehľad
+          </button>
+        </div>
       </div>
 
       <div className="ss-kpi-row">
@@ -1784,11 +2125,11 @@ export default function SharedSpacesWebPage() {
               <span>SUMA</span>
             </div>
 
-            {activityRows.length === 0 && (
+            {visibleActivityRows.length === 0 && (
               <div className="ss-room-empty">Posledná aktivita sa zobrazí po prvých transakciách.</div>
             )}
 
-            {activityRows.map((item) => (
+            {visibleActivityRows.map((item) => (
               <div className="ss-activity-row" key={item.id}>
                 <span>{formatShortDate(item.date)}</span>
                 <span>{item.roomName}</span>
@@ -1814,19 +2155,35 @@ export default function SharedSpacesWebPage() {
           <RoomDetail
             room={selectedRoom}
             users={data.users}
-            currentUserIban={currentUserIban}
+            currentUserIban={resolvedCurrentUserIban}
             onBack={() => setSelectedRoomIban(null)}
             onRefresh={fetchData}
           />
         </div>
       )}
 
-      {showCreate && currentUserIban && (
+      {showCreate && resolvedCurrentUserIban && (
         <CreateSpaceModal 
           allUsers={data?.users || []} 
-          currentUserIban={currentUserIban}
+          currentUserIban={resolvedCurrentUserIban}
           onClose={() => setShowCreate(false)} 
           onCreated={fetchData} 
+        />
+      )}
+
+      {showNotifications && resolvedCurrentUserIban && (
+        <NotificationsPanel
+          userIban={resolvedCurrentUserIban}
+          onClose={() => { setShowNotifications(false); refreshCounts(); }}
+        />
+      )}
+
+      {showInvites && resolvedCurrentUserIban && (
+        <InvitesPanel
+          userIban={resolvedCurrentUserIban}
+          onClose={() => { setShowInvites(false); refreshCounts(); }}
+          onRefresh={fetchData}
+          onCountsChanged={refreshCounts}
         />
       )}
     </SharedSpacesShell>

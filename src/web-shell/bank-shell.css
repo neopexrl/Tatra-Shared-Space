@@ -2280,6 +2280,76 @@ select {
   gap: 10px;
 }
 
+.ss-dashboard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ss-dashboard-user-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #8f9298;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ss-dashboard-user-field select {
+  width: 210px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 3px;
+  background: rgba(17, 18, 23, 0.96);
+  color: #d6d7dc;
+  outline: none;
+}
+
+.ss-dashboard-utility-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  background: rgba(18, 20, 24, 0.88);
+  color: #d8dade;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .18s ease, background-color .18s ease, color .18s ease;
+}
+
+.ss-dashboard-utility-btn-icon {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
+}
+
+.ss-dashboard-utility-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ff5b7a;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .ss-dashboard-title {
   margin: 0;
   color: #f6f6f8;
@@ -2852,6 +2922,11 @@ select {
   .ss-section-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .ss-dashboard-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .ss-dashboard-tabs {
