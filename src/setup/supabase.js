@@ -1,22 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://wctcuuftrcqrfaqgkoxc.supabase.co';
-const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://wctcuuftrcqrfaqgkoxc.supabase.co';
+const SUPABASE_ANON_KEY =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.EXPO_PUBLIC_SUPABASE_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  '';
+const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-if (!SUPABASE_KEY) {
-  console.warn('Missing Supabase `.env` variables (KEY). Make sure `.env` is loaded properly.');
+if (!SUPABASE_ANON_KEY) {
+  console.warn('Missing Supabase public `.env` variable (ANON KEY). Make sure `.env` is loaded properly.');
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+export const supabase = hasSupabaseConfig ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+function requireSupabase() {
+  if (!supabase) {
+    throw new Error('Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_ANON_KEY.');
+  }
+
+  return supabase;
+}
 
 /* ─── users ─── */
 export async function getUsers() {
+  if (!supabase) return [];
   const { data, error } = await supabase.from('users').select('*');
   if (error) throw error;
   return data;
 }
 
 export async function getUserBalance(userIban) {
+  if (!supabase) return 0;
   const { data, error } = await supabase
     .from('users')
     .select('balance')
@@ -28,12 +44,14 @@ export async function getUserBalance(userIban) {
 
 /* ─── rooms ─── */
 export async function getRooms() {
+  if (!supabase) return [];
   const { data, error } = await supabase.from('rooms').select('*');
   if (error) throw error;
   return data;
 }
 
 export async function getRoomBalance(roomIban) {
+  if (!supabase) return 0;
   const { data, error } = await supabase
     .from('rooms')
     .select('balance')
@@ -44,7 +62,8 @@ export async function getRoomBalance(roomIban) {
 }
 
 export async function createRoom(roomIban, name, balance = 0) {
-  const { data, error } = await supabase
+  const client = requireSupabase();
+  const { data, error } = await client
     .from('rooms')
     .insert({ room_iban: roomIban, name, balance })
     .select()
@@ -54,7 +73,8 @@ export async function createRoom(roomIban, name, balance = 0) {
 }
 
 export async function addRoomMember(roomIban, userIban) {
-  const { data, error } = await supabase
+  const client = requireSupabase();
+  const { data, error } = await client
     .from('room_members')
     .insert({ room_iban: roomIban, user_iban: userIban })
     .select()
@@ -65,6 +85,7 @@ export async function addRoomMember(roomIban, userIban) {
 
 /* ─── room members ─── */
 export async function getRoomMembers(roomIban) {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from('room_members')
     .select('*')
@@ -74,6 +95,7 @@ export async function getRoomMembers(roomIban) {
 }
 
 export async function getUserRooms(userIban) {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from('room_members')
     .select('*')
@@ -84,6 +106,7 @@ export async function getUserRooms(userIban) {
 
 /* ─── goals ─── */
 export async function getGoalsForRoom(roomIban) {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from('goals')
     .select('*')
@@ -93,7 +116,8 @@ export async function getGoalsForRoom(roomIban) {
 }
 
 export async function createGoal(roomIban, name, amount) {
-  const { data, error } = await supabase
+  const client = requireSupabase();
+  const { data, error } = await client
     .from('goals')
     .insert({ room_iban: roomIban, name, amount })
     .select()
@@ -104,6 +128,7 @@ export async function createGoal(roomIban, name, amount) {
 
 /* ─── transactions ─── */
 export async function getTransactionsForRoom(roomIban) {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
@@ -113,6 +138,7 @@ export async function getTransactionsForRoom(roomIban) {
 }
 
 export async function getTransactionsForUser(userIban) {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
@@ -122,7 +148,8 @@ export async function getTransactionsForUser(userIban) {
 }
 
 export async function addTransaction(fromIban, toIban, amount) {
-  const { data, error } = await supabase
+  const client = requireSupabase();
+  const { data, error } = await client
     .from('transactions')
     .insert({ from_iban: fromIban, to_iban: toIban, amount })
     .select()
@@ -133,19 +160,20 @@ export async function addTransaction(fromIban, toIban, amount) {
 
 /* ─── composite: send money to room ─── */
 export async function sendToRoom(userIban, roomIban, amount) {
+  const client = requireSupabase();
   // insert transaction
   const tx = await addTransaction(userIban, roomIban, amount);
 
   // decrease user balance
   const userBal = await getUserBalance(userIban);
-  await supabase
+  await client
     .from('users')
     .update({ balance: userBal - amount })
     .eq('user_iban', userIban);
 
   // increase room balance
   const roomBal = await getRoomBalance(roomIban);
-  await supabase
+  await client
     .from('rooms')
     .update({ balance: roomBal + amount })
     .eq('room_iban', roomIban);
@@ -155,16 +183,17 @@ export async function sendToRoom(userIban, roomIban, amount) {
 
 /* ─── composite: send from room to user ─── */
 export async function sendFromRoom(roomIban, userIban, amount) {
+  const client = requireSupabase();
   const tx = await addTransaction(roomIban, userIban, amount);
 
   const roomBal = await getRoomBalance(roomIban);
-  await supabase
+  await client
     .from('rooms')
     .update({ balance: roomBal - amount })
     .eq('room_iban', roomIban);
 
   const userBal = await getUserBalance(userIban);
-  await supabase
+  await client
     .from('users')
     .update({ balance: userBal + amount })
     .eq('user_iban', userIban);

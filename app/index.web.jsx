@@ -62,9 +62,7 @@ function TopBar() {
       <div className="tb-topbar-spacer" />
 
       <div className="tb-top-icons" aria-hidden="true">
-        <span className="tb-icon cart" />
         <span className="tb-icon help" />
-        <span className="tb-icon mail" />
         <span className="tb-icon user" />
       </div>
       <button className="tb-logout" type="button">Odhlásiť</button>
@@ -164,7 +162,6 @@ function AccountWidget() {
           <div className="tb-chart-y"><span>6 000</span><span>4 000</span><span>2 000</span><span>0</span></div>
           <LineChart />
         </div>
-        <div className="tb-chart-x"><span>01.05.</span><span>01.07.</span><span>01.09.</span><span>01.11.</span></div>
       </div>
       <div className="tb-account-footer"><span>◉ SPORENIE K ÚČTU</span><span>2 304,00 EUR</span></div>
     </section>
@@ -200,7 +197,6 @@ function SpendingReportWidget() {
         <div className="tb-report-diff">+ 748,57 EUR</div>
         <div className="tb-report-numbers">
           <span className="income">Príjmy<strong>1 824,95 EUR</strong></span>
-          <span className="divider" />
           <span className="spend">Výdavky<strong>1 076,38 EUR</strong></span>
         </div>
         <div className="tb-donut-row">
@@ -226,37 +222,71 @@ function SharedSpacesWidget() {
       .catch(() => setLoaded(true));
   }, []);
 
-  const totalBalance = rooms.reduce((a, r) => a + (r.balance || 0), 0);
+  const formatMoney = (amount) =>
+    Number(amount || 0).toLocaleString('sk-SK', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  const getTargetAmount = (room) => {
+    const explicitTarget = Number(room.target_amount ?? room.targetAmount ?? 0);
+    if (explicitTarget > 0) return explicitTarget;
+
+    const balance = Number(room.balance || 0);
+    if (balance <= 0) return 600;
+    return Math.max(Math.ceil((balance * 1.8) / 100) * 100, 600);
+  };
+
+  const visibleRooms = rooms.slice(0, 2);
+  const activeCount = rooms.filter((room) => Number(room.balance || 0) > 0).length;
+  const closedCount = Math.max(rooms.length - activeCount, 0);
+  const overviewText = loaded
+    ? `${rooms.length} priestory | ${activeCount} aktivne - ${closedCount} uzavrete`
+    : 'Nacitavam priestory...';
+  const footerText = loaded
+    ? `${closedCount} ${closedCount === 1 ? 'priestor uzavrety' : 'priestory uzavrete'}`
+    : 'Priestory sa nacitavaju';
 
   return (
-    <section className="tb-widget tb-shared-card" style={{ cursor: 'pointer' }} onClick={() => router.push('/shared-spaces')}>
-      <div className="tb-widget-header">Shared Spaces</div>
-      <div className="tb-shared-body">
-        <div className="tb-shared-summary">
-          <div className="tb-shared-stat">
-            <span className="tb-shared-stat-label">Aktivne priestory</span>
-            <strong className="tb-shared-stat-value">{loaded ? rooms.length : '--'}</strong>
-          </div>
-          <div className="tb-shared-stat">
-            <span className="tb-shared-stat-label">Zostatok</span>
-            <strong className="tb-shared-stat-value">{loaded ? `${totalBalance.toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR` : '--'}</strong>
-          </div>
+    <section className="tb-widget tb-shared-card">
+      <div className="tb-shared-shell">
+        <div className="tb-shared-header">
+          <h3 className="tb-shared-heading">SPOLOCNE VYDAVKY</h3>
+          <p className="tb-shared-overview">{overviewText}</p>
         </div>
 
-        <div className="tb-shared-spaces-list">
-          {rooms.slice(0, 3).map((room) => (
-            <div className="tb-shared-space-row" key={room.room_iban}>
-              <span className="tb-shared-space-name">{room.name || `Room ${room.room_iban}`}</span>
-              <span className="tb-shared-space-amount">{Number(room.balance || 0).toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR</span>
-            </div>
-          ))}
-          {!loaded && <div style={{ color: '#5a5c62', fontSize: 12, padding: '8px 0' }}>Nacitavam...</div>}
-        </div>
-      </div>
+        <div className="tb-shared-items">
+          {loaded && visibleRooms.length === 0 && (
+            <div className="tb-shared-empty">Zatial tu nie su ziadne priestory.</div>
+          )}
 
-      <div className="tb-shared-footer">
-        <span>Otvorit Shared Spaces</span>
-        <span className="tb-shared-arrow">--</span>
+          {visibleRooms.map((room) => {
+            const targetAmount = getTargetAmount(room);
+            const progress = Math.max(8, Math.min((Number(room.balance || 0) / targetAmount) * 100, 100));
+
+            return (
+              <div className="tb-shared-item" key={room.room_iban}>
+                <div className="tb-shared-item-head">
+                  <span className="tb-shared-item-name">{room.name || `Room ${room.room_iban}`}</span>
+                  <strong className="tb-shared-item-amount">{formatMoney(room.balance)} EUR</strong>
+                </div>
+                <div className="tb-shared-item-meta">
+                  <span className="tb-shared-item-target">Ciel {formatMoney(targetAmount)} EUR</span>
+                  <span className="tb-shared-item-bar" aria-hidden="true">
+                    <span className="tb-shared-item-fill" style={{ width: `${progress}%` }} />
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="tb-shared-bottom">
+          <span className="tb-shared-bottom-text">{footerText}</span>
+          <button className="tb-shared-open" type="button" onClick={() => router.push('/shared-spaces')}>
+            Otvorit
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -312,9 +342,9 @@ function MainContent() {
           <AccountWidget />
           <NewsWidget />
           <SpendingReportWidget />
-          <SharedSpacesWidget />
           <PensionWidget />
           <RatesWidget />
+          <SharedSpacesWidget />
         </div>
       </div>
     </main>
@@ -324,12 +354,11 @@ function MainContent() {
 export default function BankShellWebPage() {
   return (
     <div className="tb-shell">
-      <div className="tb-demo-ribbon">DEMO VERZIA 9e9ce88/null</div>
       <TopBar />
       <TabletSubNav />
       <Sidebar />
       <MainContent />
-      <button className="tb-assist-button" type="button" aria-label="Voice assistant">&#x2301;</button>
+      <button className="tb-assist-button" type="button" aria-label="Voice assistant">⌁</button>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
 import '../src/web-shell/bank-shell.css';
 import {
-  supabase,
   getUsers,
   getRooms,
   getRoomMembers,
