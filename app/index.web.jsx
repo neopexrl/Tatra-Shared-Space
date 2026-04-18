@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import '../src/web-shell/bank-shell.css';
+import { getRooms } from '../src/setup/supabase';
 
 const sideItems = [
   'Prehľad',
@@ -216,10 +217,16 @@ function SpendingReportWidget() {
 }
 
 function SharedSpacesWidget() {
-  const spaces = [
-    { name: 'Tatry Trip', members: 4, total: '342,50', you_owe: '85,63' },
-    { name: 'Byt Košická', members: 3, total: '1 240,00', you_owe: '0,00' },
-  ];
+  const [rooms, setRooms] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    getRooms()
+      .then((data) => { setRooms(data || []); setLoaded(true); })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const totalBalance = rooms.reduce((a, r) => a + (r.balance || 0), 0);
 
   return (
     <section className="tb-widget tb-shared-card" style={{ cursor: 'pointer' }} onClick={() => router.push('/shared-spaces')}>
@@ -227,35 +234,29 @@ function SharedSpacesWidget() {
       <div className="tb-shared-body">
         <div className="tb-shared-summary">
           <div className="tb-shared-stat">
-            <span className="tb-shared-stat-label">Aktívne priestory</span>
-            <strong className="tb-shared-stat-value">{spaces.length}</strong>
+            <span className="tb-shared-stat-label">Aktivne priestory</span>
+            <strong className="tb-shared-stat-value">{loaded ? rooms.length : '--'}</strong>
           </div>
           <div className="tb-shared-stat">
-            <span className="tb-shared-stat-label">Dlžíte</span>
-            <strong className="tb-shared-stat-value tb-shared-owe">85,63 EUR</strong>
+            <span className="tb-shared-stat-label">Zostatok</span>
+            <strong className="tb-shared-stat-value">{loaded ? `${totalBalance.toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR` : '--'}</strong>
           </div>
         </div>
 
         <div className="tb-shared-spaces-list">
-          {spaces.map((space) => (
-            <div className="tb-shared-space-row" key={space.name}>
-              <span className="tb-shared-space-name">{space.name}</span>
-              <span className="tb-shared-space-amount">{space.total} EUR</span>
+          {rooms.slice(0, 3).map((room) => (
+            <div className="tb-shared-space-row" key={room.room_iban}>
+              <span className="tb-shared-space-name">{room.name || `Room ${room.room_iban}`}</span>
+              <span className="tb-shared-space-amount">{Number(room.balance || 0).toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR</span>
             </div>
           ))}
-        </div>
-
-        <div className="tb-shared-avatars">
-          <span className="tb-avatar" style={{ background: '#52c7bc' }}>M</span>
-          <span className="tb-avatar" style={{ background: '#50a9ec' }}>J</span>
-          <span className="tb-avatar" style={{ background: '#557fe8' }}>S</span>
-          <span className="tb-avatar" style={{ background: '#c8b88f' }}>+2</span>
+          {!loaded && <div style={{ color: '#5a5c62', fontSize: 12, padding: '8px 0' }}>Nacitavam...</div>}
         </div>
       </div>
 
       <div className="tb-shared-footer">
-        <span>Otvoriť Shared Spaces</span>
-        <span className="tb-shared-arrow">→</span>
+        <span>Otvorit Shared Spaces</span>
+        <span className="tb-shared-arrow">--</span>
       </div>
     </section>
   );

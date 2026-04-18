@@ -1,366 +1,495 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { router } from 'expo-router';
 import '../src/web-shell/bank-shell.css';
+import {
+  supabase,
+  getUsers,
+  getRooms,
+  getRoomMembers,
+  getTransactionsForRoom,
+  sendToRoom,
+  sendFromRoom,
+  createRoom,
+  addRoomMember,
+  getGoalsForRoom,
+  createGoal,
+} from '../src/setup/supabase';
 
-/* ─── mock data ─── */
-const MOCK_SPACES = [
-  {
-    id: 1,
-    name: 'Tatry Trip',
-    type: 'trip',
-    created: '12.04.2026',
-    members: [
-      { id: 1, name: 'Marek', avatar: 'M', color: '#52c7bc', balance: -85.63 },
-      { id: 2, name: 'Jana',  avatar: 'J', color: '#50a9ec', balance: 42.10 },
-      { id: 3, name: 'Samo',  avatar: 'S', color: '#557fe8', balance: 120.00 },
-      { id: 4, name: 'Lucia', avatar: 'L', color: '#c8b88f', balance: -76.47 },
-    ],
-    expenses: [
-      { id: 1, desc: 'Ubytovanie – Chata pod Rysmi', amount: 180.00, paidBy: 'Samo', date: '13.04.2026', split: 'equal' },
-      { id: 2, desc: 'Večera – Koliba Kamzík', amount: 72.50, paidBy: 'Jana', date: '13.04.2026', split: 'equal' },
-      { id: 3, desc: 'Lístky na lanovku', amount: 56.00, paidBy: 'Samo', date: '14.04.2026', split: 'equal' },
-      { id: 4, desc: 'Potraviny Billa', amount: 34.00, paidBy: 'Marek', date: '12.04.2026', split: 'equal' },
-    ],
-    totalSpent: 342.50,
-    requests: [
-      { id: 1, from: 'Samo', to: 'Marek', amount: 85.63, status: 'pending' },
-      { id: 2, from: 'Jana', to: 'Lucia', amount: 76.47, status: 'pending' },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Byt Košická',
-    type: 'flat',
-    created: '01.01.2026',
-    members: [
-      { id: 1, name: 'Marek', avatar: 'M', color: '#52c7bc', balance: 0 },
-      { id: 5, name: 'Peter', avatar: 'P', color: '#54c36f', balance: -413.33 },
-      { id: 6, name: 'Eva',   avatar: 'E', color: '#f26a4f', balance: 413.33 },
-    ],
-    expenses: [
-      { id: 5, desc: 'Nájom – Apríl', amount: 840.00, paidBy: 'Eva', date: '01.04.2026', split: 'equal' },
-      { id: 6, desc: 'Elektrina Q1', amount: 186.00, paidBy: 'Eva', date: '05.04.2026', split: 'equal' },
-      { id: 7, desc: 'Internet – UPC', amount: 29.00, paidBy: 'Marek', date: '01.04.2026', split: 'equal' },
-      { id: 8, desc: 'Upratovanie', amount: 45.00, paidBy: 'Peter', date: '10.04.2026', split: 'equal' },
-      { id: 9, desc: 'Voda Q1', amount: 140.00, paidBy: 'Eva', date: '15.04.2026', split: 'equal' },
-    ],
-    totalSpent: 1240.00,
-    requests: [
-      { id: 3, from: 'Eva', to: 'Peter', amount: 413.33, status: 'pending' },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Darček pre Tomáša',
-    type: 'gift',
-    created: '10.04.2026',
-    members: [
-      { id: 1, name: 'Marek', avatar: 'M', color: '#52c7bc', balance: 0 },
-      { id: 2, name: 'Jana',  avatar: 'J', color: '#50a9ec', balance: 0 },
-      { id: 7, name: 'Viki',  avatar: 'V', color: '#db02b5', balance: 0 },
-    ],
-    expenses: [
-      { id: 10, desc: 'Apple AirPods Pro', amount: 279.00, paidBy: 'Jana', date: '15.04.2026', split: 'equal' },
-    ],
-    totalSpent: 279.00,
-    requests: [],
-  },
-];
+/* ─── constants ─── */
+const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
+const CURRENT_USER_IBAN = '01'; // Mock logged-in user
 
-const TYPE_ICONS = { trip: 'T', flat: 'B', gift: 'D', other: 'S' };
+/* ─── helpers ─── */
+function formatAmount(n) {
+  return Number(n).toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getInitial(name) {
+  return name ? name.charAt(0).toUpperCase() : '?';
+}
+
+/* ─── data loading ─── */
+async function loadFullData() {
+  const [users, rooms] = await Promise.all([getUsers(), getRooms()]);
+
+  const enrichedRooms = await Promise.all(
+    rooms.map(async (room) => {
+      const members = await getRoomMembers(room.room_iban);
+      const transactions = await getTransactionsForRoom(room.room_iban);
+      const goals = await getGoalsForRoom(room.room_iban);
+
+      // enrich members with user info
+      const enrichedMembers = members.map((m, i) => {
+        const user = users.find((u) => u.user_iban === m.user_iban);
+        return {
+          ...m,
+          name: user?.name || user?.user_iban || m.user_iban,
+          avatar: getInitial(user?.name || m.user_iban),
+          color: MEMBER_COLORS[i % MEMBER_COLORS.length],
+          userBalance: user?.balance || 0,
+        };
+      });
+
+      return {
+        ...room,
+        members: enrichedMembers,
+        transactions,
+        memberCount: enrichedMembers.length,
+        targetAmount: goals.length > 0 ? goals[0].amount : null,
+      };
+    })
+  );
+
+  return { users, rooms: enrichedRooms };
+}
 
 /* ─── components ─── */
-
 function BackHeader({ title, onBack }) {
   return (
     <div className="ss-header">
-      <button className="ss-back" type="button" onClick={onBack}>← Späť</button>
+      <button className="ss-back" type="button" onClick={onBack}>
+        Spat
+      </button>
       <h1 className="ss-title">{title}</h1>
     </div>
   );
 }
 
-function SpaceCard({ space, onClick }) {
-  const owes = space.members.find(m => m.name === 'Marek');
-  const pendingCount = space.requests.filter(r => r.status === 'pending').length;
+function LoadingState() {
+  return (
+    <div className="ss-empty" style={{ padding: '80px 0' }}>
+      <div style={{ color: '#8e9095', fontSize: 15 }}>Nacitavam data...</div>
+    </div>
+  );
+}
 
+function ErrorState({ message, onRetry }) {
+  return (
+    <div className="ss-empty" style={{ padding: '60px 0' }}>
+      <div style={{ color: '#ff5b7a', fontSize: 14, marginBottom: 12 }}>{message}</div>
+      <button className="ss-btn ss-btn-primary" type="button" onClick={onRetry}>
+        Skusit znova
+      </button>
+    </div>
+  );
+}
+
+function RoomCard({ room, onClick }) {
   return (
     <div className="ss-space-card" onClick={onClick}>
       <div className="ss-space-card-top">
-        <span className="ss-space-icon">{TYPE_ICONS[space.type] || 'S'}</span>
+        <span className="ss-space-icon">{getInitial(room.name || room.room_iban)}</span>
         <div className="ss-space-card-info">
-          <span className="ss-space-card-name">{space.name}</span>
-          <span className="ss-space-card-date">Vytvorené {space.created}</span>
+          <span className="ss-space-card-name">{room.name || `Room ${room.room_iban}`}</span>
+          <span className="ss-space-card-date">IBAN: {room.room_iban}</span>
         </div>
-        <span className="ss-space-card-total">{space.totalSpent.toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR</span>
+        <span className="ss-space-card-total">{formatAmount(room.balance)} EUR</span>
       </div>
       <div className="ss-space-card-bottom">
         <div className="ss-space-card-avatars">
-          {space.members.slice(0, 4).map(m => (
-            <span key={m.id} className="tb-avatar" style={{ background: m.color }}>{m.avatar}</span>
+          {room.members.slice(0, 5).map((m, i) => (
+            <span key={m.user_iban || i} className="tb-avatar" style={{ background: m.color }}>
+              {m.avatar}
+            </span>
           ))}
-          {space.members.length > 4 && <span className="tb-avatar" style={{ background: '#555' }}>+{space.members.length - 4}</span>}
+          {room.members.length > 5 && (
+            <span className="tb-avatar" style={{ background: '#555' }}>
+              +{room.members.length - 5}
+            </span>
+          )}
         </div>
         <div className="ss-space-card-meta">
-          {owes && owes.balance < 0 && (
-            <span className="ss-badge ss-badge-owe">Dlžíte {Math.abs(owes.balance).toFixed(2)} €</span>
-          )}
-          {owes && owes.balance > 0 && (
-            <span className="ss-badge ss-badge-owed">Dlžia vám {owes.balance.toFixed(2)} €</span>
-          )}
-          {owes && owes.balance === 0 && (
-            <span className="ss-badge ss-badge-settled">Vyrovnané ✓</span>
-          )}
-          {pendingCount > 0 && (
-            <span className="ss-badge ss-badge-pending">{pendingCount} žiadostí</span>
-          )}
+          <span className="ss-badge ss-badge-pending">{room.transactions.length} transakcii</span>
+          {room.balance > 0 && <span className="ss-badge ss-badge-owed">{formatAmount(room.balance)} EUR</span>}
         </div>
       </div>
     </div>
   );
 }
 
-function SpaceDetail({ space, onBack }) {
-  const [tab, setTab] = useState('expenses');
-  const [showAddExpense, setShowAddExpense] = useState(false);
-  const [showScanReceipt, setShowScanReceipt] = useState(false);
-  const [scanStep, setScanStep] = useState(0);
+function RoomDetail({ room, users, onBack, onRefresh }) {
+  const [tab, setTab] = useState('transactions');
+  const [sending, setSending] = useState(false);
+  const [sendAmount, setSendAmount] = useState('');
+  const [showSendForm, setShowSendForm] = useState(false);
+  const [sendDirection, setSendDirection] = useState('to_room'); // 'to_room' or 'from_room'
+  const [showAddMember, setShowAddMember] = useState(false);
 
-  const simulateScan = () => {
-    setShowScanReceipt(true);
-    setScanStep(0);
-    setTimeout(() => setScanStep(1), 800);
-    setTimeout(() => setScanStep(2), 1800);
-    setTimeout(() => setScanStep(3), 2600);
+  const handleSend = async () => {
+    if (!sendAmount || Number(sendAmount) <= 0) return;
+    setSending(true);
+    try {
+      if (sendDirection === 'to_room') {
+        await sendToRoom(CURRENT_USER_IBAN, room.room_iban, Number(sendAmount));
+      } else {
+        await sendFromRoom(room.room_iban, CURRENT_USER_IBAN, Number(sendAmount));
+      }
+      setSendAmount('');
+      setShowSendForm(false);
+      await onRefresh();
+    } catch (err) {
+      console.error('Transaction failed:', err);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <div className="ss-detail">
-      <BackHeader title={space.name} onBack={onBack} />
+      <BackHeader title={room.name || `Room ${room.room_iban}`} onBack={onBack} />
 
       {/* summary bar */}
       <div className="ss-summary-bar">
         <div className="ss-summary-item">
-          <span className="ss-summary-label">Celkové výdavky</span>
-          <strong className="ss-summary-value">{space.totalSpent.toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR</strong>
+          <span className="ss-summary-label">Zostatok priestoru</span>
+          <strong className="ss-summary-value">
+            {formatAmount(room.balance)} EUR
+            {room.targetAmount && <span style={{ color: '#8e9095', fontWeight: 500, fontSize: 14 }}> / {formatAmount(room.targetAmount)} EUR</span>}
+          </strong>
         </div>
         <div className="ss-summary-divider" />
         <div className="ss-summary-item">
-          <span className="ss-summary-label">Členovia</span>
-          <strong className="ss-summary-value">{space.members.length}</strong>
+          <span className="ss-summary-label">Clenovia</span>
+          <strong className="ss-summary-value">{room.members.length}</strong>
         </div>
         <div className="ss-summary-divider" />
         <div className="ss-summary-item">
-          <span className="ss-summary-label">Na osobu ø</span>
-          <strong className="ss-summary-value">{(space.totalSpent / space.members.length).toFixed(2)} EUR</strong>
+          <span className="ss-summary-label">Transakcie</span>
+          <strong className="ss-summary-value">{room.transactions.length}</strong>
         </div>
       </div>
 
       {/* tabs */}
       <div className="ss-tabs">
-        <button type="button" className={tab === 'expenses' ? 'is-active' : ''} onClick={() => setTab('expenses')}>Výdavky</button>
-        <button type="button" className={tab === 'balances' ? 'is-active' : ''} onClick={() => setTab('balances')}>Zostatky</button>
-        <button type="button" className={tab === 'requests' ? 'is-active' : ''} onClick={() => setTab('requests')}>
-          Žiadosti
-          {space.requests.filter(r => r.status === 'pending').length > 0 && (
-            <i className="ss-tab-badge">{space.requests.filter(r => r.status === 'pending').length}</i>
-          )}
+        <button
+          type="button"
+          className={tab === 'transactions' ? 'is-active' : ''}
+          onClick={() => setTab('transactions')}
+        >
+          Transakcie
+        </button>
+        <button
+          type="button"
+          className={tab === 'members' ? 'is-active' : ''}
+          onClick={() => setTab('members')}
+        >
+          Clenovia
+        </button>
+        <button
+          type="button"
+          className={tab === 'send' ? 'is-active' : ''}
+          onClick={() => setTab('send')}
+        >
+          Poslat platbu
         </button>
       </div>
 
-      {/* tab content */}
-      {tab === 'expenses' && (
+      {/* transactions tab */}
+      {tab === 'transactions' && (
         <div className="ss-tab-panel">
-          <div className="ss-actions-row">
-            <button className="ss-btn ss-btn-primary" type="button" onClick={() => setShowAddExpense(!showAddExpense)}>+ Pridať výdavok</button>
-            <button className="ss-btn ss-btn-secondary" type="button" onClick={simulateScan}>Skenovať účtenku</button>
-          </div>
-
-          {showAddExpense && (
-            <div className="ss-add-expense-form">
-              <input className="ss-input" type="text" placeholder="Popis výdavku" />
-              <input className="ss-input" type="number" placeholder="Suma (EUR)" />
-              <select className="ss-input">
-                {space.members.map(m => <option key={m.id}>{m.name}</option>)}
-              </select>
-              <select className="ss-input">
-                <option>Rozdeliť rovnomerne</option>
-                <option>Vlastné sumy</option>
-              </select>
-              <button className="ss-btn ss-btn-primary" type="button" onClick={() => setShowAddExpense(false)}>Uložiť</button>
-            </div>
+          {room.transactions.length === 0 && (
+            <div className="ss-empty">Ziadne transakcie v tomto priestore.</div>
           )}
-
-          {showScanReceipt && (
-            <div className="ss-receipt-scan">
-              <div className="ss-receipt-header">
-                <strong>Skenovanie účtenky</strong>
-                <button className="ss-close-btn" type="button" onClick={() => { setShowScanReceipt(false); setScanStep(0); }}>✕</button>
-              </div>
-              <div className="ss-receipt-steps">
-                <div className={`ss-receipt-step ${scanStep >= 0 ? 'active' : ''} ${scanStep > 0 ? 'done' : ''}`}>
-                  <span className="ss-step-dot" />
-                  <span>Načítavanie obrázka...</span>
-                </div>
-                <div className={`ss-receipt-step ${scanStep >= 1 ? 'active' : ''} ${scanStep > 1 ? 'done' : ''}`}>
-                  <span className="ss-step-dot" />
-                  <span>AI rozpoznáva položky...</span>
-                </div>
-                <div className={`ss-receipt-step ${scanStep >= 2 ? 'active' : ''} ${scanStep > 2 ? 'done' : ''}`}>
-                  <span className="ss-step-dot" />
-                  <span>Rozdeľovanie sumy...</span>
-                </div>
-                <div className={`ss-receipt-step ${scanStep >= 3 ? 'active' : ''}`}>
-                  <span className="ss-step-dot" />
-                  <span>Hotovo!</span>
-                </div>
-              </div>
-              {scanStep >= 3 && (
-                <div className="ss-receipt-result">
-                  <div className="ss-receipt-item"><span>Bryndzové halušky ×2</span><strong>17,80 €</strong></div>
-                  <div className="ss-receipt-item"><span>Pivo Zlatý Bažant ×4</span><strong>11,60 €</strong></div>
-                  <div className="ss-receipt-item"><span>Kapustnica</span><strong>6,90 €</strong></div>
-                  <div className="ss-receipt-item"><span>Kofola 0.5l ×2</span><strong>5,20 €</strong></div>
-                  <div className="ss-receipt-item ss-receipt-total"><span>Spolu</span><strong>41,50 €</strong></div>
-                  <button className="ss-btn ss-btn-primary" type="button" style={{ marginTop: 12, width: '100%' }} onClick={() => { setShowScanReceipt(false); setScanStep(0); }}>Pridať do výdavkov</button>
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="ss-expense-list">
-            {space.expenses.map(exp => (
-              <div className="ss-expense-row" key={exp.id}>
-                <div className="ss-expense-main">
-                  <span className="ss-expense-desc">{exp.desc}</span>
-                  <span className="ss-expense-meta">Zaplatil {exp.paidBy} · {exp.date}</span>
+            {room.transactions.map((tx, i) => {
+              const isIncoming = tx.to_iban === room.room_iban;
+              const otherIban = isIncoming ? tx.from_iban : tx.to_iban;
+              const otherUser = users.find((u) => u.user_iban === otherIban);
+              const otherName = otherUser?.name || otherIban;
+
+              return (
+                <div className="ss-expense-row" key={tx.id || i}>
+                  <div className="ss-expense-main">
+                    <span className="ss-expense-desc">
+                      {isIncoming ? `${otherName} -- priestor` : `Priestor -- ${otherName}`}
+                    </span>
+                    <span className="ss-expense-meta">
+                      {isIncoming ? 'Prijem do priestoru' : 'Vydaj z priestoru'}
+                      {tx.created_at ? ` · ${new Date(tx.created_at).toLocaleDateString('sk-SK')}` : ''}
+                    </span>
+                  </div>
+                  <div className="ss-expense-amount">
+                    <strong
+                      style={{
+                        color: isIncoming ? 'var(--tb-green, #00d39a)' : '#ff5b7a',
+                      }}
+                    >
+                      {isIncoming ? '+' : '-'}
+                      {formatAmount(tx.amount)} EUR
+                    </strong>
+                  </div>
                 </div>
-                <div className="ss-expense-amount">
-                  <strong>{exp.amount.toFixed(2)} EUR</strong>
-                  <span className="ss-expense-split">÷ {space.members.length} = {(exp.amount / space.members.length).toFixed(2)} €</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {tab === 'balances' && (
+      {/* members tab */}
+      {tab === 'members' && (
         <div className="ss-tab-panel">
           <div className="ss-balance-chart">
-            {space.members.map(m => {
-              const maxAbs = Math.max(...space.members.map(mm => Math.abs(mm.balance)), 1);
-              const pct = Math.abs(m.balance) / maxAbs * 100;
+            {room.members.map((m) => {
+              const maxBal = Math.max(...room.members.map((mm) => Math.abs(mm.userBalance || 0)), 1);
+              const pct = (Math.abs(m.userBalance || 0) / maxBal) * 100;
               return (
-                <div className="ss-balance-row" key={m.id}>
-                  <span className="tb-avatar" style={{ background: m.color }}>{m.avatar}</span>
+                <div className="ss-balance-row" key={m.user_iban}>
+                  <span className="tb-avatar" style={{ background: m.color }}>
+                    {m.avatar}
+                  </span>
                   <span className="ss-balance-name">{m.name}</span>
                   <div className="ss-balance-bar-wrap">
                     <div
-                      className={`ss-balance-bar ${m.balance >= 0 ? 'positive' : 'negative'}`}
+                      className={`ss-balance-bar ${(m.userBalance || 0) >= 0 ? 'positive' : 'negative'}`}
                       style={{ width: `${Math.max(pct, 4)}%` }}
                     />
                   </div>
-                  <span className={`ss-balance-amount ${m.balance >= 0 ? 'positive' : 'negative'}`}>
-                    {m.balance >= 0 ? '+' : ''}{m.balance.toFixed(2)} €
+                  <span
+                    className={`ss-balance-amount ${(m.userBalance || 0) >= 0 ? 'positive' : 'negative'}`}
+                  >
+                    {formatAmount(m.userBalance || 0)} EUR
                   </span>
                 </div>
               );
             })}
           </div>
+          <button 
+            className="ss-btn ss-btn-secondary" 
+            type="button" 
+            style={{ width: '100%', marginTop: 16 }} 
+            onClick={() => setShowAddMember(true)}
+          >
+            + Pozvat clena
+          </button>
+        </div>
+      )}
 
-          <div className="ss-settle-section">
-            <h3 className="ss-settle-title">Optimálne vyrovnanie</h3>
-            {space.members
-              .filter(m => m.balance < 0)
-              .map(debtor => {
-                const creditor = space.members.find(m => m.balance > 0);
-                if (!creditor) return null;
-                return (
-                  <div className="ss-settle-row" key={debtor.id}>
-                    <span className="tb-avatar" style={{ background: debtor.color }}>{debtor.avatar}</span>
-                    <span className="ss-settle-arrow">→</span>
-                    <span className="tb-avatar" style={{ background: creditor.color }}>{creditor.avatar}</span>
-                    <strong className="ss-settle-amount">{Math.abs(debtor.balance).toFixed(2)} EUR</strong>
-                    <button className="ss-btn ss-btn-send" type="button">Poslať žiadosť</button>
-                  </div>
-                );
-              })}
+      {/* send tab */}
+      {tab === 'send' && (
+        <div className="ss-tab-panel">
+          <div className="ss-add-expense-form">
+            <label className="ss-label">Smer platby</label>
+            <select
+              className="ss-input"
+              value={sendDirection}
+              onChange={(e) => setSendDirection(e.target.value)}
+            >
+              <option value="to_room">Pouzivatel -- Priestor (vklad)</option>
+              <option value="from_room">Priestor -- Pouzivatel (vyber)</option>
+            </select>
+
+            <label className="ss-label">
+              {sendDirection === 'to_room' ? 'Z vasho uctu do priestoru' : 'Z priestoru na vas ucet'}
+            </label>
+            <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: 6, marginBottom: 16, color: '#fff' }}>
+              Moj ucet ({CURRENT_USER_IBAN})
+            </div>
+
+            <label className="ss-label">Suma (EUR)</label>
+            <input
+              className="ss-input"
+              type="number"
+              placeholder="0.00"
+              value={sendAmount}
+              onChange={(e) => setSendAmount(e.target.value)}
+            />
+
+            <button
+              className="ss-btn ss-btn-primary"
+              type="button"
+              style={{ width: '100%', marginTop: 8 }}
+              disabled={sending || !sendAmount}
+              onClick={handleSend}
+            >
+              {sending ? 'Spracovavam...' : 'Potvrdit platbu'}
+            </button>
           </div>
         </div>
       )}
 
-      {tab === 'requests' && (
-        <div className="ss-tab-panel">
-          {space.requests.length === 0 && (
-            <div className="ss-empty">Žiadne žiadosti o platbu.</div>
-          )}
-          {space.requests.map(req => (
-            <div className="ss-request-row" key={req.id}>
-              <div className="ss-request-info">
-                <span className="ss-request-names">{req.from} → {req.to}</span>
-                <strong className="ss-request-amount">{req.amount.toFixed(2)} EUR</strong>
-              </div>
-              <div className="ss-request-actions">
-                {req.status === 'pending' && req.to === 'Marek' && (
-                  <>
-                    <button className="ss-btn ss-btn-approve" type="button">✓ Potvrdiť</button>
-                    <button className="ss-btn ss-btn-decline" type="button">✕ Odmietnuť</button>
-                  </>
-                )}
-                {req.status === 'pending' && req.to !== 'Marek' && (
-                  <span className="ss-badge ss-badge-pending">Čaká na potvrdenie</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* members */}
+      {/* members strip */}
       <div className="ss-members-strip">
-        <span className="ss-members-label">Členovia:</span>
-        {space.members.map(m => (
-          <span key={m.id} className="tb-avatar" style={{ background: m.color }} title={m.name}>{m.avatar}</span>
-        ))}
-        <button className="ss-invite-btn" type="button">+ Pozvať</button>
+        <span className="ss-members-label">IBAN priestoru:</span>
+        <span style={{ color: '#b8babf', fontSize: 13, fontFamily: 'monospace' }}>{room.room_iban}</span>
+      </div>
+
+      {showAddMember && (
+        <AddMemberModal 
+          room={room} 
+          allUsers={users} 
+          onClose={() => setShowAddMember(false)} 
+          onAdded={onRefresh} 
+        />
+      )}
+    </div>
+  );
+}
+
+function AddMemberModal({ room, allUsers, onClose, onAdded }) {
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // filter out users already in room
+  const availableUsers = allUsers.filter(u => !room.members.some(m => m.user_iban === u.user_iban));
+
+  const handleAdd = async () => {
+    if (selectedUserIds.length === 0) return;
+    setLoading(true);
+    try {
+      for (const userId of selectedUserIds) {
+        await addRoomMember(room.room_iban, userId);
+      }
+      await onAdded();
+      onClose();
+    } catch (err) {
+      console.error('Failed to add members', err);
+      alert('Chyba pri pridavani: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  const toggleUser = (userId) => {
+    if (selectedUserIds.includes(userId)) {
+      setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
+    } else {
+      setSelectedUserIds([...selectedUserIds, userId]);
+    }
+  };
+
+  return (
+    <div className="ss-modal-backdrop" onClick={onClose}>
+      <div className="ss-modal" onClick={e => e.stopPropagation()}>
+        <div className="ss-modal-header">
+          <h2>Pozvat clena</h2>
+          <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
+        </div>
+        <div className="ss-modal-body">
+          {availableUsers.length === 0 ? (
+            <div className="ss-empty">Vsetci pouzivatelia uz su v priestore.</div>
+          ) : (
+            <div style={{ maxHeight: 200, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
+              {availableUsers.map(u => (
+                <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
+                  <input type="checkbox" checked={selectedUserIds.includes(u.user_iban)} onChange={() => toggleUser(u.user_iban)} />
+                  {u.name || u.user_iban}
+                </label>
+              ))}
+            </div>
+          )}
+
+          <button className="ss-btn ss-btn-primary" type="button" style={{ width: '100%' }} disabled={selectedUserIds.length === 0 || loading} onClick={handleAdd}>
+            {loading ? 'Pridavam...' : 'Pridat vybranych'}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function CreateSpaceModal({ onClose }) {
+function CreateSpaceModal({ onClose, onCreated, allUsers }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('trip');
+  const [targetAmount, setTargetAmount] = useState('');
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      // create random IBAN
+      const roomIban = `SK${Math.floor(10000000000000000000 + Math.random() * 90000000000000000000)}`;
+      await createRoom(roomIban, name, 0);
+
+      // add selected members (and the current user automatically)
+      const membersToAdd = [...new Set([CURRENT_USER_IBAN, ...selectedUserIds])];
+      for (const userId of membersToAdd) {
+        await addRoomMember(roomIban, userId);
+      }
+
+      // add target sum if exists
+      if (targetAmount && Number(targetAmount) > 0) {
+        await createGoal(roomIban, name, Number(targetAmount));
+      }
+
+      await onCreated();
+      onClose();
+    } catch (err) {
+      console.error('Failed to create space', err);
+      alert('Chyba pri vytvarani: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  const toggleUser = (userId) => {
+    if (selectedUserIds.includes(userId)) {
+      setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
+    } else {
+      setSelectedUserIds([...selectedUserIds, userId]);
+    }
+  };
+
   return (
     <div className="ss-modal-backdrop" onClick={onClose}>
       <div className="ss-modal" onClick={e => e.stopPropagation()}>
         <div className="ss-modal-header">
-          <h2>Nový Shared Space</h2>
-          <button className="ss-close-btn" type="button" onClick={onClose}>✕</button>
+          <h2>Novy Shared Space</h2>
+          <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
         </div>
         <div className="ss-modal-body">
-          <label className="ss-label">Názov priestoru</label>
-          <input className="ss-input" type="text" placeholder="napr. Tatry Trip, Byt Košická..." />
+          <label className="ss-label">Nazov priestoru</label>
+          <input className="ss-input" type="text" placeholder="napr. Tatry Trip, Byt Kosicka..." value={name} onChange={e => setName(e.target.value)} />
 
           <label className="ss-label">Typ</label>
-          <div className="ss-type-picker">
+          <div className="ss-type-picker" style={{ marginBottom: 16 }}>
             {[
-              { type: 'trip', icon: 'T', label: 'Výlet' },
-              { type: 'flat', icon: 'B', label: 'Bývanie' },
-              { type: 'gift', icon: 'D', label: 'Darček' },
-              { type: 'other', icon: 'S', label: 'Iné' },
+              { type: 'trip', icon: 'T', label: 'Vylet' },
+              { type: 'flat', icon: 'B', label: 'Byvanie' },
+              { type: 'gift', icon: 'D', label: 'Darcek' },
+              { type: 'other', icon: 'S', label: 'Ine' },
             ].map(t => (
-              <button key={t.type} className="ss-type-btn" type="button">
+              <button key={t.type} className={`ss-type-btn ${type === t.type ? 'active' : ''}`} type="button" onClick={() => setType(t.type)} style={type === t.type ? { borderColor: 'var(--tb-blue)', background: 'rgba(0,151,230,0.1)' } : {}}>
                 <span>{t.icon}</span>
                 <span>{t.label}</span>
               </button>
             ))}
           </div>
 
-          <label className="ss-label">Pozvať členov</label>
-          <input className="ss-input" type="text" placeholder="Meno alebo e-mail" />
+          <label className="ss-label">Cielova suma (nepovinne, v EUR)</label>
+          <input className="ss-input" type="number" placeholder="napr. 500" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} style={{ marginBottom: 16 }} />
 
-          <button className="ss-btn ss-btn-primary" type="button" style={{ width: '100%', marginTop: 16 }} onClick={onClose}>
-            Vytvoriť priestor
+          <label className="ss-label">Pozvat clenov z kontaktov</label>
+          <div style={{ maxHeight: 150, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
+            {allUsers && allUsers.filter(u => u.user_iban !== CURRENT_USER_IBAN).map(u => (
+              <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
+                <input type="checkbox" checked={selectedUserIds.includes(u.user_iban)} onChange={() => toggleUser(u.user_iban)} />
+                {u.name || u.user_iban}
+              </label>
+            ))}
+          </div>
+
+          <button className="ss-btn ss-btn-primary" type="button" style={{ width: '100%' }} disabled={!name.trim() || loading} onClick={handleCreate}>
+            {loading ? 'Vytvaram...' : 'Vytvorit priestor'}
           </button>
         </div>
       </div>
@@ -369,53 +498,116 @@ function CreateSpaceModal({ onClose }) {
 }
 
 /* ─── main page ─── */
-
 export default function SharedSpacesWebPage() {
-  const [selected, setSelected] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedRoomIban, setSelectedRoomIban] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const selectedSpace = MOCK_SPACES.find(s => s.id === selected);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await loadFullData();
+      setData(result);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+      setError(err.message || 'Nepodarilo sa nacitat data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const selectedRoom = data?.rooms?.find((r) => r.room_iban === selectedRoomIban);
+
+  if (loading) {
+    return (
+      <div className="ss-page">
+        <div className="ss-container">
+          <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
+          <LoadingState />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="ss-page">
+        <div className="ss-container">
+          <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
+          <ErrorState message={error} onRetry={fetchData} />
+        </div>
+      </div>
+    );
+  }
+
+  const totalBalance = data.rooms.reduce((a, r) => a + (r.balance || 0), 0);
+  const totalTransactions = data.rooms.reduce((a, r) => a + r.transactions.length, 0);
 
   return (
     <div className="ss-page">
       <div className="ss-container">
-        {!selectedSpace ? (
+        {!selectedRoom ? (
           <>
             <BackHeader title="Shared Spaces" onBack={() => router.push('/')} />
 
             <div className="ss-overview-bar">
               <div className="ss-overview-stat">
-                <span>Celkové zdieľané výdavky</span>
-                <strong>{MOCK_SPACES.reduce((a, s) => a + s.totalSpent, 0).toLocaleString('sk-SK', { minimumFractionDigits: 2 })} EUR</strong>
+                <span>Celkovy zostatok</span>
+                <strong>{formatAmount(totalBalance)} EUR</strong>
               </div>
               <div className="ss-overview-stat">
-                <span>Aktívne priestory</span>
-                <strong>{MOCK_SPACES.length}</strong>
+                <span>Aktivne priestory</span>
+                <strong>{data.rooms.length}</strong>
               </div>
               <div className="ss-overview-stat">
-                <span>Otvorené žiadosti</span>
-                <strong>{MOCK_SPACES.reduce((a, s) => a + s.requests.filter(r => r.status === 'pending').length, 0)}</strong>
+                <span>Celkom transakcii</span>
+                <strong>{totalTransactions}</strong>
               </div>
             </div>
 
             <div className="ss-create-row">
               <button className="ss-btn ss-btn-create" type="button" onClick={() => setShowCreate(true)}>
-                + Vytvoriť nový priestor
+                + Vytvorit novy priestor
               </button>
             </div>
 
             <div className="ss-space-list">
-              {MOCK_SPACES.map(space => (
-                <SpaceCard key={space.id} space={space} onClick={() => setSelected(space.id)} />
+              {data.rooms.map((room) => (
+                <RoomCard
+                  key={room.room_iban}
+                  room={room}
+                  onClick={() => setSelectedRoomIban(room.room_iban)}
+                />
               ))}
+              {data.rooms.length === 0 && (
+                <div className="ss-empty">Ziadne priestory.</div>
+              )}
             </div>
           </>
         ) : (
-          <SpaceDetail space={selectedSpace} onBack={() => setSelected(null)} />
+          <RoomDetail
+            room={selectedRoom}
+            users={data.users}
+            onBack={() => setSelectedRoomIban(null)}
+            onRefresh={fetchData}
+          />
         )}
       </div>
 
-      {showCreate && <CreateSpaceModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateSpaceModal 
+          allUsers={data?.users || []} 
+          onClose={() => setShowCreate(false)} 
+          onCreated={fetchData} 
+        />
+      )}
     </div>
   );
 }
