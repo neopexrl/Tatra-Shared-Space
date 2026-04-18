@@ -1,0 +1,165 @@
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #1d1e23;
+}
+
+body {
+  overflow: hidden;
+  font-family: Roboto, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.bank-shell-page {
+  width: 100vw;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #1d1e23;
+}
+
+.bank-shell-stage {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.bank-shell-artboard {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1200px;
+  transform-origin: top left;
+}
+
+.bank-shell-render {
+  width: 1920px;
+  height: 1200px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.bank-shell-render .frame1920wdefault-container1 {
+  width: 1920px;
+  min-height: 1200px;
+  height: 1200px;
+  display: block;
+  overflow: hidden;
+}
+
+.bank-shell-render .frame1920wdefault-thq-frame1920wdefault-elm {
+  width: 1920px;
+  height: 1200px;
+}
+
+.bank-shell-render button,
+.bank-shell-render a,
+.bank-shell-render input,
+.bank-shell-render textarea,
+.bank-shell-render select {
+  pointer-events: none !important;
+}
+
+.bank-shell-cta {
+  position: absolute;
+  right: 28px;
+  bottom: 38px;
+  min-width: 230px;
+  padding: 16px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 24px;
+  background: rgba(15, 89, 104, 0.96);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 24px 44px rgba(0, 0, 0, 0.28);
+}
+
+.bank-shell-cta:hover {
+  background: rgba(20, 110, 128, 0.98);
+}
+
+.bank-shell-cta:focus-visible {
+  outline: 3px solid rgba(78, 190, 214, 0.78);
+  outline-offset: 4px;
+}
+
+.bank-shell-shared-page {
+  width: 100vw;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(180deg, #19191d 0%, #101014 100%);
+  color: #ffffff;
+  font-family: Roboto, Arial, sans-serif;
+}
+
+.bank-shell-shared-card {
+  width: min(100%, 520px);
+  padding: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  background: rgba(33, 34, 38, 0.96);
+  box-shadow: 0 24px 44px rgba(0, 0, 0, 0.28);
+}
+
+.bank-shell-shared-card h1 {
+  margin: 0 0 16px;
+  font-size: 36px;
+  line-height: 1.1;
+}
+
+.bank-shell-shared-card p {
+  margin: 0 0 24px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.bank-shell-secondary {
+  min-width: 140px;
+  padding: 14px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  background: transparent;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bank-shell-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 860px) {
+  .bank-shell-cta {
+    right: 16px;
+    bottom: 16px;
+    min-width: 180px;
+    padding: 13px 18px;
+    border-radius: 18px;
+    font-size: 14px;
+  }
+
+  .bank-shell-shared-card {
+    padding: 28px;
+    border-radius: 22px;
+  }
+
+  .bank-shell-shared-card h1 {
+    font-size: 30px;
+  }
+}
