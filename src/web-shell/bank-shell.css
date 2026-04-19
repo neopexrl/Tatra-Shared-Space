@@ -4173,6 +4173,59 @@ select {
   .ss-shopping-card-list {
     grid-template-columns: 1fr;
   }
+  .ss-detail-form-grid {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+  .ss-detail-info-card {
+    padding: 0;
+  }
+  .ss-detail-account-box,
+  .ss-detail-send-card {
+    width: 100%;
+  }
+  .ss-detail-form-grid .ss-kpi-label {
+    font-size: 12px;
+  }
+
+  .ss-room-table,
+  .ss-room-row {
+    min-width: auto;
+  }
+
+  .ss-room-table-head {
+    display: none;
+  }
+
+  .ss-room-row {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, auto);
+    padding: 14px;
+    border-top: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .ss-room-name-cell {
+    cursor: pointer;
+  }
+
+  .ss-room-name-copy strong,
+  .ss-room-name-copy span {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+
+  .ss-room-members-cell {
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .ss-room-state-cell,
+  .ss-room-activity-cell,
+  .ss-room-balance-cell,
+  .ss-room-action-cell {
+    display: none;
+  }
 }
 
 .ss-detail-toolbar-row {

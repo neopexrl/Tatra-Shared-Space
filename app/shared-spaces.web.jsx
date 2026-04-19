@@ -2423,7 +2423,18 @@ export default function SharedSpacesWebPage() {
 
             {filteredRooms.map((room) => (
               <div className="ss-room-row" key={room.room_iban}>
-                <div className="ss-room-name-cell">
+                <div
+                  className="ss-room-name-cell"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedRoomIban(room.room_iban)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedRoomIban(room.room_iban);
+                    }
+                  }}
+                >
                   <span className="ss-room-letter">{getInitial(room.name || room.room_iban)}</span>
                   <div className="ss-room-name-copy">
                     <strong>{room.name || room.room_iban}</strong>
