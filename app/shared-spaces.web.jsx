@@ -10,6 +10,10 @@ import {
   sendFromRoom,
   createRoom,
   addRoomMember,
+  removeRoomMember,
+  getRoomSpending,
+  closeRoom,
+  updateRoomName,
   getGoalsForRoom,
   createGoal,
   getChecks,
@@ -220,16 +224,21 @@ async function loadFullData() {
       const members = await getRoomMembers(room.room_iban);
       const transactions = await getTransactionsForRoom(room.room_iban);
       const goals = await getGoalsForRoom(room.room_iban);
+      const spending = await getRoomSpending(room.room_iban);
 
       // enrich members with user info
       const enrichedMembers = members.map((m, i) => {
         const user = users.find((u) => u.user_iban === m.user_iban);
+        // Check if this is the room creator (from created_by_user_iban)
+        const isCreator = room.created_by_user_iban === m.user_iban;
         return {
           ...m,
           name: user?.name || user?.user_iban || m.user_iban,
           avatar: getInitial(user?.name || m.user_iban),
           color: MEMBER_COLORS[i % MEMBER_COLORS.length],
           userBalance: user?.balance || 0,
+          role: m.role || (isCreator ? 'owner' : 'member'),
+          spending: spending[m.user_iban] || 0,
         };
       });
 
@@ -249,6 +258,7 @@ async function loadFullData() {
         memberCount: enrichedMembers.length,
         targetAmount: goals.length > 0 ? goals[0].amount : null,
         checks: enrichedChecks,
+        spending,
       };
     })
   );
@@ -583,6 +593,12 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const [parsingReceipt, setParsingReceipt] = useState(false);
   const fileInputRef = React.useRef(null);
 
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closingRoom, setClosingRoom] = useState(false);
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [editedRoomName, setEditedRoomName] = useState(room.name || '');
+  const [removingMember, setRemovingMember] = useState(null);
+
   const processReceiptFile = async (file) => {
     if (!file) return;
     setParsingReceipt(true);
@@ -685,6 +701,50 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
     await onRefresh();
   }, [onRefresh]);
 
+  const handleCloseRoom = async () => {
+    if (!isOwner) return;
+    setClosingRoom(true);
+    try {
+      await closeRoom(room.room_iban);
+      setShowCloseModal(false);
+      await onRefresh();
+    } catch (err) {
+      console.error('Failed to close room:', err);
+      alert('Chyba pri zatváraní priestoru: ' + err.message);
+    } finally {
+      setClosingRoom(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberIban) => {
+    if (!isOwner || memberIban === currentUserIban) {
+      alert('Nemôžete odstrániť seba samého alebo nemáte oprávnenie.');
+      return;
+    }
+    setRemovingMember(memberIban);
+    try {
+      await removeRoomMember(room.room_iban, memberIban);
+      await onRefresh();
+    } catch (err) {
+      console.error('Failed to remove member:', err);
+      alert('Chyba pri odstraňovaní člena: ' + err.message);
+    } finally {
+      setRemovingMember(null);
+    }
+  };
+
+  const handleEditRoomName = async () => {
+    if (!isOwner || !editedRoomName.trim()) return;
+    try {
+      await updateRoomName(room.room_iban, editedRoomName.trim());
+      setShowEditNameModal(false);
+      await onRefresh();
+    } catch (err) {
+      console.error('Failed to update room name:', err);
+      alert('Chyba pri zmene názvu: ' + err.message);
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -702,6 +762,54 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
   const targetAmount = Number(room.targetAmount || 0);
   const progress = targetAmount > 0 ? Math.max(0, Math.min((Number(room.balance || 0) / targetAmount) * 100, 100)) : 0;
   const latestTransactionDate = room.transactions?.[0]?.created_at;
+
+  // Role and owner calculations
+  const currentUserMember = room.members?.find((m) => m.user_iban === currentUserIban);
+  const currentUserRole = currentUserMember?.role || 'member';
+  const isOwner = currentUserRole === 'owner';
+
+  // Settlement calculation
+  const calculateSettlement = () => {
+    const remaining = Number(room.balance || 0);
+    if (remaining <= 0) return {};
+
+    const memberContributions = {};
+    const memberSpending = {};
+
+    // Sum contributions from transactions
+    (room.transactions || []).forEach((tx) => {
+      if (tx.to_iban === room.room_iban && tx.from_iban) {
+        memberContributions[tx.from_iban] = (memberContributions[tx.from_iban] || 0) + Number(tx.amount || 0);
+      }
+    });
+
+    // Get spending
+    room.members?.forEach((m) => {
+      memberSpending[m.user_iban] = m.spending || 0;
+    });
+
+    // Calculate distribution based on contribution percentage
+    const totalContributed = Object.values(memberContributions).reduce((a, b) => a + b, 0);
+    const distribution = {};
+
+    if (totalContributed > 0) {
+      Object.keys(memberContributions).forEach((iban) => {
+        const contrib = memberContributions[iban];
+        const percent = contrib / totalContributed;
+        distribution[iban] = {
+          contribution: contrib,
+          spending: memberSpending[iban] || 0,
+          percentOfTotal: percent,
+          refund: remaining * percent,
+        };
+      });
+    }
+
+    return distribution;
+  };
+
+  const settlement = calculateSettlement();
+
   const totalShoppingItems = (room.checks || []).reduce((sum, check) => sum + (check.items?.length || 0), 0);
   const unassignedShoppingItems = (room.checks || []).reduce(
     (sum, check) => sum + (check.items || []).filter((item) => !item.user_iban).length,
@@ -756,6 +864,28 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
               <button className="ss-kpi-cta ss-detail-pay-btn" type="button" onClick={() => setTab('send')}>
                 Poslať platbu
               </button>
+              <div className="ss-detail-icon-buttons">
+                {isOwner && (
+                  <>
+                    <button
+                      className="ss-icon-btn ss-icon-edit-btn"
+                      type="button"
+                      title="Zmeniť názov priestoru"
+                      onClick={() => setShowEditNameModal(true)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="ss-icon-btn ss-icon-close-btn"
+                      type="button"
+                      title="Zatvoriť priestor"
+                      onClick={() => setShowCloseModal(true)}
+                    >
+                      🗑
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -815,6 +945,15 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
             >
               Členovia
             </button>
+            {Object.keys(settlement).length > 0 && (
+              <button
+                type="button"
+                className={tab === 'settlement' ? 'is-active' : ''}
+                onClick={() => setTab('settlement')}
+              >
+                Vyrovnanie
+              </button>
+            )}
             <button
               type="button"
               className={tab === 'shopping' ? 'is-active' : ''}
@@ -885,7 +1024,24 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                       <span>{m.user_iban}</span>
                     </div>
                   </div>
-                  <span className="ss-state-badge is-active">Člen</span>
+                  <div className="ss-detail-member-meta">
+                    <span className={`ss-state-badge ${m.role === 'owner' ? 'is-owner' : 'is-active'}`}>
+                      {m.role === 'owner' ? 'Vlastník' : 'Člen'}
+                    </span>
+                    {m.spending > 0 && (
+                      <span className="ss-spending-badge">{formatAmount(m.spending)} EUR (nákup)</span>
+                    )}
+                    {isOwner && m.user_iban !== currentUserIban && (
+                      <button
+                        className="ss-remove-btn"
+                        type="button"
+                        disabled={removingMember === m.user_iban}
+                        onClick={() => handleRemoveMember(m.user_iban)}
+                      >
+                        {removingMember === m.user_iban ? 'Odstraňujem...' : '✕'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -937,6 +1093,61 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                   {sending ? 'Spracovávam...' : 'Potvrdiť platbu'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'settlement' && (
+          <div className="ss-detail-panel-body">
+            <div className="ss-settlement-container">
+              <div className="ss-settlement-info">
+                <h3>Vyrovnanie zostatku priestoru</h3>
+                <p className="ss-settlement-description">
+                  Zostatok {formatAmount(room.balance)} EUR sa rozdelí medzi všetkých členov v pomere k ich príspevkom.
+                </p>
+              </div>
+
+              <div className="ss-settlement-breakdown">
+                {Object.entries(settlement).map(([memberIban, data]) => {
+                  const member = room.members?.find((m) => m.user_iban === memberIban);
+                  return (
+                    <div className="ss-settlement-row" key={memberIban}>
+                      <div className="ss-settlement-member">
+                        <span className="tb-avatar" style={{ background: member?.color || '#ccc' }}>
+                          {member?.avatar || '?'}
+                        </span>
+                        <div className="ss-settlement-member-copy">
+                          <strong>{member?.name || memberIban}</strong>
+                          <span className="ss-settlement-stat">
+                            Príspevok: {formatAmount(data.contribution)} EUR
+                          </span>
+                          <span className="ss-settlement-stat">
+                            Nákup: {formatAmount(data.spending)} EUR
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ss-settlement-amount">
+                        <span className="ss-settlement-percent">{Math.round(data.percentOfTotal * 100)}%</span>
+                        <strong className="ss-settlement-refund">
+                          +{formatAmount(data.refund)} EUR
+                        </strong>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isOwner && room.balance > 0 && (
+                <div className="ss-settlement-actions">
+                  <button
+                    className="ss-kpi-cta ss-settlement-close-btn"
+                    type="button"
+                    onClick={() => setShowCloseModal(true)}
+                  >
+                    🔒 Zatvoriť priestor a vyrovnať
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1114,6 +1325,81 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
       )}
       {showInviteModal && (
         <InviteModal room={room} onClose={() => setShowInviteModal(false)} />
+      )}
+      {showCloseModal && (
+        <div className="ss-modal-backdrop" onClick={() => setShowCloseModal(false)}>
+          <div className="ss-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ss-modal-header">
+              <h2>Zatvoriť priestor</h2>
+              <button className="ss-close-btn" type="button" onClick={() => setShowCloseModal(false)}>x</button>
+            </div>
+            <div className="ss-modal-body">
+              <p style={{ marginBottom: 16, color: 'rgba(255,255,255,0.8)' }}>
+                Naozaj chcete zatvoriť tento priestor? Zostatok {formatAmount(room.balance)} EUR 
+                sa rozdelí medzi všetkých členov v pomere k ich príspevkom.
+              </p>
+              <div style={{ background: 'rgba(255,255,255,0.04)', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <strong style={{ color: '#ffd700', fontSize: 14 }}>Poznámka:</strong>
+                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 6 }}>
+                  Túto akciu nie je možné vrátiť. Priestor sa nadobro zatvori.
+                </p>
+              </div>
+            </div>
+            <div className="ss-modal-footer" style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="ss-btn ss-btn-secondary"
+                type="button"
+                onClick={() => setShowCloseModal(false)}
+              >
+                Zrušiť
+              </button>
+              <button
+                className="ss-btn ss-btn-danger"
+                type="button"
+                disabled={closingRoom}
+                onClick={handleCloseRoom}
+              >
+                {closingRoom ? 'Zatvára sa...' : '🔒 Potvrdiť zatvorenie'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showEditNameModal && (
+        <div className="ss-modal-backdrop" onClick={() => setShowEditNameModal(false)}>
+          <div className="ss-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ss-modal-header">
+              <h2>Zmeniť názov priestoru</h2>
+              <button className="ss-close-btn" type="button" onClick={() => setShowEditNameModal(false)}>x</button>
+            </div>
+            <div className="ss-modal-body">
+              <input
+                className="ss-input"
+                type="text"
+                placeholder="Názov priestoru"
+                value={editedRoomName}
+                onChange={(e) => setEditedRoomName(e.target.value)}
+              />
+            </div>
+            <div className="ss-modal-footer" style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="ss-btn ss-btn-secondary"
+                type="button"
+                onClick={() => setShowEditNameModal(false)}
+              >
+                Zrušiť
+              </button>
+              <button
+                className="ss-btn ss-btn-primary"
+                type="button"
+                onClick={handleEditRoomName}
+                disabled={!editedRoomName.trim()}
+              >
+                Zmeniť názov
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1370,8 +1656,8 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
       const roomIban = `SK${Math.floor(10000000000000000000 + Math.random() * 90000000000000000000)}`;
       await createRoom(roomIban, name, 0, currentUserIban, type);
 
-      // add the creator directly as a member
-      await addRoomMember(roomIban, currentUserIban);
+      // add the creator directly as owner
+      await addRoomMember(roomIban, currentUserIban, 'owner');
 
       // invite selected users (not direct add)
       for (const userId of selectedUserIds) {

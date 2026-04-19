@@ -191,7 +191,7 @@ export async function acceptRoomInvite(inviteId) {
   // 5. Insert into room_members FIRST (before marking accepted)
   const { error: memberErr } = await client
     .from('room_members')
-    .insert({ room_iban: invite.room_iban, user_iban: invite.invited_user_iban })
+    .insert({ room_iban: invite.room_iban, user_iban: invite.invited_user_iban, role: 'member' })
     .select()
     .single();
 

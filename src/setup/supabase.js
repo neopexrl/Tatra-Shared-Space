@@ -79,15 +79,40 @@ export async function createRoom(roomIban, name, balance = 0, createdByUserIban 
   return data;
 }
 
-export async function addRoomMember(roomIban, userIban) {
+export async function addRoomMember(roomIban, userIban, role = 'member') {
   const client = requireSupabase();
-  const { data, error } = await client
+  // Try with role first, fallback without if column doesn't exist
+  try {
+    const { data, error } = await client
+      .from('room_members')
+      .insert({ room_iban: roomIban, user_iban: userIban, role })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    // Fallback if role column doesn't exist yet
+    if (err.message?.includes('role')) {
+      const { data, error } = await client
+        .from('room_members')
+        .insert({ room_iban: roomIban, user_iban: userIban })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
+    throw err;
+  }
+}
+
+export async function removeRoomMember(roomIban, userIban) {
+  const client = requireSupabase();
+  const { error } = await client
     .from('room_members')
-    .insert({ room_iban: roomIban, user_iban: userIban })
-    .select()
-    .single();
+    .delete()
+    .eq('room_iban', roomIban)
+    .eq('user_iban', userIban);
   if (error) throw error;
-  return data;
 }
 
 /* ─── room members ─── */
@@ -109,6 +134,54 @@ export async function getUserRooms(userIban) {
     .eq('user_iban', userIban);
   if (error) throw error;
   return data;
+}
+
+export async function getRoomSpending(roomIban) {
+  if (!supabase) return {};
+  const { data: checks, error: checksError } = await supabase
+    .from('checks')
+    .select('*')
+    .eq('room_iban', roomIban);
+  if (checksError) throw checksError;
+
+  const spending = {};
+  
+  for (const check of checks || []) {
+    const { data: items, error: itemsError } = await supabase
+      .from('check_list')
+      .select('*')
+      .eq('check_id', check.id);
+    if (itemsError) throw itemsError;
+
+    for (const item of items || []) {
+      if (item.user_iban) {
+        spending[item.user_iban] = (spending[item.user_iban] || 0) + Number(item.amount || 0);
+      }
+    }
+  }
+
+  return spending;
+}
+
+export async function closeRoom(roomIban, closedAt = null) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('rooms')
+    .update({ 
+      status: 'closed',
+      closed_at: closedAt || new Date().toISOString()
+    })
+    .eq('room_iban', roomIban);
+  if (error) throw error;
+}
+
+export async function updateRoomName(roomIban, name) {
+  const client = requireSupabase();
+  const { error } = await client
+    .from('rooms')
+    .update({ name })
+    .eq('room_iban', roomIban);
+  if (error) throw error;
 }
 
 /* ─── goals ─── */

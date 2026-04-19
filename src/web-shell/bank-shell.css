@@ -2738,8 +2738,8 @@ select {
   height: 36px;
   padding: 0 14px;
   border: 1px solid rgba(0, 151, 230, 0.8);
-  border-radius: 3px;
-  background: rgba(23, 27, 33, 0.96);
+  border-radius: 8px;
+  background: #171b21;
   color: #ffffff;
   font-size: 14px;
   font-weight: 700;
@@ -3321,6 +3321,7 @@ select {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .ss-detail-pay-btn {
@@ -4620,7 +4621,7 @@ select {
 .ss-invite-btn {
   padding: 5px 12px;
   border: 1px dashed rgba(0, 151, 230, 0.4);
-  border-radius: 14px;
+  border-radius: 8px;
   background: transparent;
   color: var(--tb-blue, #0097e6);
   font-size: 12px;
@@ -4771,6 +4772,297 @@ select {
 
 .ss-type-btn span:first-child {
   font-size: 24px;
+}
+
+/* roles and settlement */
+.ss-detail-icon-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+}
+
+.ss-icon-btn {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #2f3545;
+  background: #232630;
+  color: #c6cad4;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+}
+
+.ss-icon-btn:hover {
+  background: #2c3240;
+  color: #e5e9f2;
+  border-color: #4a5568;
+}
+
+.ss-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.ss-icon-edit-btn {
+  color: #0097e6;
+  border-color: rgba(0, 151, 230, 0.2);
+  background: rgba(0, 151, 230, 0.08);
+}
+
+.ss-icon-edit-btn:hover {
+  background: rgba(0, 151, 230, 0.15);
+  color: #0097e6;
+  border-color: rgba(0, 151, 230, 0.3);
+}
+
+.ss-icon-close-btn {
+  color: #ffffff;
+  border-color: #ff5b7a;
+  background: #ff5b7a;
+}
+
+.ss-icon-close-btn:hover {
+  background: #ff4d6a;
+  color: #ffffff;
+  border-color: #ff5b7a;
+}
+
+.ss-state-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ss-state-badge.is-active {
+  background: rgba(0, 211, 154, 0.15);
+  color: #00d39a;
+}
+
+.ss-state-badge.is-owner {
+  background: rgba(255, 223, 0, 0.15);
+  color: #ffd700;
+}
+
+.ss-spending-badge {
+  font-size: 12px;
+  color: #8f9298;
+}
+
+.ss-detail-member-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ss-remove-btn {
+  padding: 4px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s ease;
+  min-width: 24px;
+  text-align: center;
+}
+
+.ss-remove-btn:hover:not(:disabled) {
+  color: #ff5b7a;
+  background: rgba(240, 24, 71, 0.1);
+}
+
+.ss-remove-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.ss-remove-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ss-detail-edit-btn,
+.ss-detail-close-btn {
+  background: rgba(255, 223, 0, 0.1);
+  border: 1px solid rgba(255, 223, 0, 0.3);
+  color: #ffd700;
+}
+
+.ss-detail-edit-btn:hover,
+.ss-detail-close-btn:hover {
+  background: rgba(255, 223, 0, 0.2);
+  border-color: rgba(255, 223, 0, 0.5);
+}
+
+.ss-settlement-container {
+  padding: 24px;
+}
+
+.ss-settlement-info {
+  margin-bottom: 24px;
+}
+
+.ss-settlement-info h3 {
+  margin: 0 0 8px;
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.ss-settlement-description {
+  margin: 0;
+  color: #8f9298;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ss-settlement-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.ss-settlement-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.ss-settlement-member {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+}
+
+.ss-settlement-member .tb-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.ss-settlement-member-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ss-settlement-member-copy strong {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.ss-settlement-stat {
+  font-size: 12px;
+  color: #8f9298;
+  line-height: 1.4;
+}
+
+.ss-settlement-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.ss-settlement-percent {
+  font-size: 12px;
+  color: #8f9298;
+  font-weight: 500;
+}
+
+.ss-settlement-refund {
+  font-size: 16px;
+  color: #00d39a;
+}
+
+.ss-settlement-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.ss-settlement-close-btn {
+  flex: 1;
+  background: rgba(0, 211, 154, 0.15);
+  border: 1px solid rgba(0, 211, 154, 0.3);
+  color: #00d39a;
+}
+
+.ss-settlement-close-btn:hover {
+  background: rgba(0, 211, 154, 0.25);
+  border-color: rgba(0, 211, 154, 0.5);
+}
+
+.ss-modal-footer {
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  gap: 8px;
+}
+
+.ss-btn {
+  padding: 10px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.ss-btn-primary {
+  background: #0097e6;
+  color: #ffffff;
+}
+
+.ss-btn-primary:hover:not(:disabled) {
+  background: #0085d4;
+}
+
+.ss-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #b8babf;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.ss-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ss-btn-danger {
+  background: rgba(240, 24, 71, 0.15);
+  color: #ff5b7a;
+  border-color: rgba(240, 24, 71, 0.3);
+}
+
+.ss-btn-danger:hover:not(:disabled) {
+  background: rgba(240, 24, 71, 0.25);
+  border-color: rgba(240, 24, 71, 0.5);
+}
+
+.ss-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* responsive */
