@@ -885,7 +885,8 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                       title="Zmeniť názov priestoru"
                       onClick={() => setShowEditNameModal(true)}
                     >
-                      ✎
+                      <span className="ss-icon-btn-glyph" aria-hidden="true">✎</span>
+                      <span>Upraviť</span>
                     </button>
                     <button
                       className="ss-icon-btn ss-icon-close-btn"
@@ -893,7 +894,8 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                       title="Zatvoriť priestor"
                       onClick={() => setShowCloseModal(true)}
                     >
-                      🗑
+                      <span className="ss-icon-btn-glyph" aria-hidden="true">⌦</span>
+                      <span>Uzatvoriť</span>
                     </button>
                   </>
                 )}
@@ -1156,7 +1158,7 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                     type="button"
                     onClick={() => setShowCloseModal(true)}
                   >
-                    🔒 Zatvoriť priestor a vyrovnať
+                    Vyrovnať a uzatvoriť priestor
                   </button>
                 </div>
               )}
