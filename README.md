@@ -44,3 +44,59 @@ This was built as a rapid proof-of-concept during Hack Košice 2026. The goal wa
 - This repository represents a prototype, not a final production release
 - The current implementation is designed for speed and demonstration
 - Future improvements can include stronger backend integration, accessibility improvements, and expanded transaction workflows
+
+## How to Run Locally
+
+### Prerequisites
+- Node.js version 20.19.4 or higher
+- npm (comes with Node.js)
+- For mobile development: Expo Go app on your phone (available on App Store/Google Play)
+
+### Installation
+1. Clone or download this repository to your local machine.
+2. Navigate to the project directory:
+   ```
+   cd Tatra-Shared-Space
+   ```
+3. Install dependencies:
+   ```
+   npm install
+   ```
+
+### Environment Setup
+The project uses environment variables for Supabase (database) and Gemini AI integration. These are already configured in the `.env` file included in the repository. If you need to modify them (e.g., for a different Supabase instance), update the `.env` file accordingly.
+
+### Running the Application
+This is an Expo-based React Native application that supports web, Android, and iOS.
+
+#### For Web (Recommended for quick testing)
+```
+npm start
+```
+This will start a development server and open the app in your default web browser.
+
+#### For Mobile
+1. Install the Expo Go app on your mobile device.
+2. Run:
+   ```
+   npm start
+   ```
+3. Scan the QR code displayed in the terminal with the Expo Go app.
+
+#### For Native Platforms
+- Android: `npm run android` (requires Android Studio and emulator or device)
+- iOS: `npm run ios` (requires Xcode and simulator or device, macOS only)
+
+### Backend and Database
+The application uses Supabase as a backend-as-a-service for database operations. No local backend server is required as all data operations are handled through Supabase's API. The database schema is defined in the `backend/database/` folder with SQL migration files.
+
+### Type Checking
+To run TypeScript type checking:
+```
+npm run typecheck
+```
+
+### Troubleshooting
+- If you encounter issues with dependencies, try deleting `node_modules` and `package-lock.json`, then run `npm install` again.
+- Ensure your Node.js version matches the requirement (>=20.19.4).
+- For web issues, check that port 19006 (default Expo port) is not blocked.
