@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import '../src/web-shell/bank-shell.css';
 import {
   getUsers,
@@ -2022,7 +2022,11 @@ export default function SharedSpacesWebPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedRoomIban, setSelectedRoomIban] = useState(null);
+  const { room } = useLocalSearchParams();
+  const selectedRoomIban = room || null;
+  const setSelectedRoomIban = (iban) => {
+    router.setParams({ room: iban || '' });
+  };
   const [showCreate, setShowCreate] = useState(false);
   const [filterTab, setFilterTab] = useState('all');
   const [sortBy, setSortBy] = useState('latest');
