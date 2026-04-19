@@ -2738,8 +2738,8 @@ select {
   height: 36px;
   padding: 0 14px;
   border: 1px solid rgba(0, 151, 230, 0.8);
-  border-radius: 3px;
-  background: rgba(23, 27, 33, 0.96);
+  border-radius: 8px;
+  background: #171b21;
   color: #ffffff;
   font-size: 14px;
   font-weight: 700;
@@ -3321,6 +3321,7 @@ select {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .ss-detail-pay-btn {
@@ -4620,7 +4621,7 @@ select {
 .ss-invite-btn {
   padding: 5px 12px;
   border: 1px dashed rgba(0, 151, 230, 0.4);
-  border-radius: 14px;
+  border-radius: 8px;
   background: transparent;
   color: var(--tb-blue, #0097e6);
   font-size: 12px;
@@ -4777,19 +4778,19 @@ select {
 .ss-detail-icon-buttons {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   position: relative;
 }
 
 .ss-icon-btn {
   padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  border: 1px solid #2f3545;
+  background: #232630;
+  color: #c6cad4;
   font-size: 16px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4798,51 +4799,37 @@ select {
 }
 
 .ss-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: #2c3240;
+  color: #e5e9f2;
+  border-color: #4a5568;
 }
 
 .ss-icon-btn:active {
   transform: scale(0.95);
 }
 
-.ss-icon-notifications-btn {
-  position: relative;
-}
-
-.ss-notification-dot {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 6px;
-  height: 6px;
-  background: #00d39a;
-  border-radius: 50%;
-}
-
 .ss-icon-edit-btn {
-  color: #ffd700;
-  border-color: rgba(255, 223, 0, 0.2);
-  background: rgba(255, 223, 0, 0.08);
+  color: #0097e6;
+  border-color: rgba(0, 151, 230, 0.2);
+  background: rgba(0, 151, 230, 0.08);
 }
 
 .ss-icon-edit-btn:hover {
-  background: rgba(255, 223, 0, 0.15);
-  color: #ffd700;
-  border-color: rgba(255, 223, 0, 0.3);
+  background: rgba(0, 151, 230, 0.15);
+  color: #0097e6;
+  border-color: rgba(0, 151, 230, 0.3);
 }
 
 .ss-icon-close-btn {
-  color: #ff5b7a;
-  border-color: rgba(240, 24, 71, 0.2);
-  background: rgba(240, 24, 71, 0.08);
+  color: #ffffff;
+  border-color: #ff5b7a;
+  background: #ff5b7a;
 }
 
 .ss-icon-close-btn:hover {
-  background: rgba(240, 24, 71, 0.15);
-  color: #ff5b7a;
-  border-color: rgba(240, 24, 71, 0.3);
+  background: #ff4d6a;
+  color: #ffffff;
+  border-color: #ff5b7a;
 }
 
 .ss-state-badge {

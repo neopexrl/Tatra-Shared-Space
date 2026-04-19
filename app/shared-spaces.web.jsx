@@ -865,15 +865,6 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                 Poslať platbu
               </button>
               <div className="ss-detail-icon-buttons">
-                {showNotifications && <span className="ss-notification-dot"></span>}
-                <button
-                  className="ss-icon-btn ss-icon-notifications-btn"
-                  type="button"
-                  title="Notifikácie"
-                  onClick={() => setShowNotifications(!showNotifications)}
-                >
-                  🔔
-                </button>
                 {isOwner && (
                   <>
                     <button
