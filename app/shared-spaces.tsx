@@ -4,6 +4,7 @@ import {
   Alert,
   ImageBackground,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -17,10 +18,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   addCheckItem,
   addRoomMember,
   batchAddCheckItems,
+  closeRoom,
   createCheck,
   createGoal,
   createRoom,
@@ -31,9 +34,11 @@ import {
   getRooms,
   getTransactionsForRoom,
   getUsers,
+  removeRoomMember,
   sendFromRoom,
   sendToRoom,
   toggleCheckItemClaim,
+  updateRoomName,
 } from '../src/setup/supabase';
 import {
   getNotificationsForUser,
@@ -70,18 +75,33 @@ const COLORS = {
 };
 
 const MEMBER_COLORS = ['#52c7bc', '#50a9ec', '#557fe8', '#c8b88f', '#54c36f', '#f26a4f', '#db02b5', '#f0da0a'];
+const UNSPLASH_APP_NAME = 'tatra_shared_spaces';
+const UNSPLASH_ACCESS_KEY = process.env.EXPO_PUBLIC_UNSPLASH_ACCESS_KEY || '';
+const ROOM_COVER_STORAGE_KEY = 'tatra-mobile-room-cover-map-v1';
 const ROOM_COVER_FALLBACKS = [
-  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&h=900&q=80',
-  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&h=900&q=80',
-  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1600&h=900&q=80',
-  'https://images.unsplash.com/photo-1505764706515-aa95265c5abc?auto=format&fit=crop&w=1600&h=900&q=80',
+  {
+    id: 'tb-cover-1',
+    url: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&h=900&q=80',
+  },
+  {
+    id: 'tb-cover-2',
+    url: 'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=1600&h=900&q=80',
+  },
+  {
+    id: 'tb-cover-3',
+    url: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1600&h=900&q=80',
+  },
+  {
+    id: 'tb-cover-4',
+    url: 'https://images.unsplash.com/photo-1505764706515-aa95265c5abc?auto=format&fit=crop&w=1600&h=900&q=80',
+  },
 ];
 
 const INVITE_TOKEN_SECRET = 'tatra_shared_spaces_invite_secret';
 
 type FilterTab = 'all' | 'active' | 'closed';
 type SortBy = 'latest' | 'balance' | 'name';
-type DetailTab = 'transactions' | 'members' | 'shopping' | 'send';
+type DetailTab = 'transactions' | 'members' | 'settlement' | 'shopping' | 'send';
 type SendDirection = 'to_room' | 'from_room';
 
 type UserRow = {
@@ -107,6 +127,7 @@ type RoomRow = {
 type RoomMemberRow = {
   room_iban: string;
   user_iban: string;
+  role?: string | null;
 };
 
 type GoalRow = {
@@ -165,6 +186,7 @@ type MemberModel = RoomMemberRow & {
   avatar: string;
   color: string;
   userBalance: number;
+  spending: number;
 };
 
 type RoomModel = RoomRow & {
@@ -235,9 +257,103 @@ function hashString(value: string) {
   return [...value].reduce((acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) | 0, 0);
 }
 
+type RoomCoverEntry = {
+  id: string;
+  url: string;
+};
+
+async function readRoomCoverMap() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      return JSON.parse(window.localStorage.getItem(ROOM_COVER_STORAGE_KEY) || '{}') as Record<string, RoomCoverEntry>;
+    } catch {
+      return {};
+    }
+  }
+
+  try {
+    const raw = await AsyncStorage.getItem(ROOM_COVER_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, RoomCoverEntry>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeRoomCoverMap(map: Record<string, RoomCoverEntry>) {
+  const serialized = JSON.stringify(map);
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.localStorage.setItem(ROOM_COVER_STORAGE_KEY, serialized);
+    return;
+  }
+
+  await AsyncStorage.setItem(ROOM_COVER_STORAGE_KEY, serialized);
+}
+
 function getRoomCover(roomIban: string) {
   const index = Math.abs(hashString(roomIban)) % ROOM_COVER_FALLBACKS.length;
+  return ROOM_COVER_FALLBACKS[index].url;
+}
+
+function getFallbackRoomCover(roomIban: string) {
+  const index = Math.abs(hashString(roomIban)) % ROOM_COVER_FALLBACKS.length;
   return ROOM_COVER_FALLBACKS[index];
+}
+
+async function fetchUnsplashRoomCover() {
+  if (!UNSPLASH_ACCESS_KEY || typeof fetch === 'undefined') return null;
+
+  const response = await fetch(
+    `https://api.unsplash.com/photos/random?query=${encodeURIComponent('landscape mountains travel nature')}&orientation=landscape&content_filter=high`,
+    {
+      headers: {
+        Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Unsplash request failed: ${response.status}`);
+  }
+
+  const photo = await response.json();
+
+  if (!photo?.urls?.regular) {
+    return null;
+  }
+
+  return {
+    id: photo.id,
+    url: `${photo.urls.regular}&q=80&fm=jpg&fit=crop&w=1600&h=900`,
+  } satisfies RoomCoverEntry;
+}
+
+async function ensureRoomCover(roomIban: string) {
+  const storedMap = await readRoomCoverMap();
+
+  if (storedMap[roomIban]?.url) {
+    return storedMap[roomIban];
+  }
+
+  let cover: RoomCoverEntry | null = null;
+
+  try {
+    cover = await fetchUnsplashRoomCover();
+  } catch {
+    cover = null;
+  }
+
+  if (!cover) {
+    cover = getFallbackRoomCover(roomIban);
+  }
+
+  const nextMap = {
+    ...storedMap,
+    [roomIban]: cover,
+  };
+
+  await writeRoomCoverMap(nextMap);
+  return cover;
 }
 
 function createInviteToken(roomIban: string) {
@@ -269,7 +385,7 @@ async function loadFullData(): Promise<FullData> {
         getChecks(room.room_iban) as Promise<Omit<CheckRow, 'items'>[]>,
       ]);
 
-      const enrichedMembers: MemberModel[] = members.map((member, index) => {
+      const enrichedMembers = members.map((member, index) => {
         const user = users.find((entry) => entry.user_iban === member.user_iban);
         return {
           ...member,
@@ -290,14 +406,27 @@ async function loadFullData(): Promise<FullData> {
         }),
       );
 
+      const memberSpending = enrichedChecks.reduce<Record<string, number>>((acc, check) => {
+        (check.items || []).forEach((item) => {
+          if (!item.user_iban) return;
+          acc[item.user_iban] = (acc[item.user_iban] || 0) + Number(item.amount || 0);
+        });
+        return acc;
+      }, {});
+
+      const membersWithSpending: MemberModel[] = enrichedMembers.map((member) => ({
+        ...member,
+        spending: memberSpending[member.user_iban] || 0,
+      }));
+
       const primaryGoal = (goals || [])[0];
 
       return {
         ...room,
         balance: Number(room.balance || 0),
-        members: enrichedMembers,
+        members: membersWithSpending,
         transactions: transactions || [],
-        memberCount: enrichedMembers.length,
+        memberCount: membersWithSpending.length,
         targetAmount: Number(primaryGoal?.amount || 0),
         checks: enrichedChecks,
       };
@@ -308,18 +437,6 @@ async function loadFullData(): Promise<FullData> {
     users,
     rooms: enrichedRooms,
   };
-}
-
-function FakeStatusBar({ compact }: { compact: boolean }) {
-  return (
-    <View style={styles.statusBar}>
-      <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>20:44</Text>
-      <View style={styles.statusBarRight}>
-        <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>4G+</Text>
-        <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>46%</Text>
-      </View>
-    </View>
-  );
 }
 
 function Badge({
@@ -542,46 +659,67 @@ function RoomListCard({
   room: RoomModel;
   onOpen: () => void;
 }) {
+  const [coverUrl, setCoverUrl] = useState(() => getRoomCover(room.room_iban));
+
+  useEffect(() => {
+    let active = true;
+
+    void ensureRoomCover(room.room_iban).then((cover) => {
+      if (active && cover?.url) {
+        setCoverUrl(cover.url);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [room.room_iban]);
+
   return (
     <Pressable onPress={onOpen} style={({ pressed }) => [styles.roomCard, pressed && styles.pressed]}>
-      <View style={[styles.roomAccent, { backgroundColor: room.hasPending ? COLORS.warning : COLORS.accentBlue }]} />
-      <View style={styles.roomCardTop}>
-        <View style={styles.roomCardTitleWrap}>
-          <Text style={styles.roomCardTitle}>{room.name || room.room_iban}</Text>
-          <Text style={styles.roomCardSubtitle}>{room.room_iban}</Text>
-        </View>
-        <View style={styles.roomCardBalanceWrap}>
-          <Text style={styles.roomCardBalance}>{formatAmount(room.balance)} EUR</Text>
-        </View>
-      </View>
-
-      <View style={styles.roomCardMeta}>
-        <View style={styles.avatarRow}>
-          {room.members.slice(0, 4).map((member, index) => (
-            <Avatar
-              key={member.user_iban}
-              label={member.avatar}
-              color={member.color}
-              overlap={index > 0}
-            />
-          ))}
-          {room.members.length > 4 ? (
-            <View style={[styles.avatar, styles.avatarMore, styles.avatarOverlap]}>
-              <Text style={styles.avatarText}>+{room.members.length - 4}</Text>
+      <ImageBackground source={{ uri: coverUrl }} style={styles.roomCardBackground} imageStyle={styles.roomCardBackgroundImage}>
+        <View style={styles.roomCardOverlay} />
+        <View style={[styles.roomAccent, { backgroundColor: room.hasPending ? COLORS.warning : COLORS.accentBlue }]} />
+        <View style={styles.roomCardInner}>
+          <View style={styles.roomCardTop}>
+            <View style={styles.roomCardTitleWrap}>
+              <Text style={styles.roomCardTitle}>{room.name || room.room_iban}</Text>
+              <Text style={styles.roomCardSubtitle}>{room.room_iban}</Text>
             </View>
-          ) : null}
-        </View>
+            <View style={styles.roomCardBalanceWrap}>
+              <Text style={styles.roomCardBalance}>{formatAmount(room.balance)} EUR</Text>
+            </View>
+          </View>
 
-        <View style={styles.roomBadgeRow}>
-          <Badge text={room.isClosed ? 'Uzavretý' : 'Aktívny'} tone={room.isClosed ? 'neutral' : 'blue'} />
-          {room.hasPending ? <Badge text="Čaká vyrovnanie" tone="warning" /> : null}
-        </View>
-      </View>
+          <View style={styles.roomCardMeta}>
+            <View style={styles.avatarRow}>
+              {room.members.slice(0, 4).map((member, index) => (
+                <Avatar
+                  key={member.user_iban}
+                  label={member.avatar}
+                  color={member.color}
+                  overlap={index > 0}
+                />
+              ))}
+              {room.members.length > 4 ? (
+                <View style={[styles.avatar, styles.avatarMore, styles.avatarOverlap]}>
+                  <Text style={styles.avatarText}>+{room.members.length - 4}</Text>
+                </View>
+              ) : null}
+            </View>
 
-      <View style={styles.roomCardFooter}>
-        <Text style={styles.roomCardHint}>{room.activityLabel}</Text>
-        <Text style={styles.roomCardHint}>{room.activityHint || 'Bez detailu'}</Text>
-      </View>
+            <View style={styles.roomBadgeRow}>
+              <Badge text={room.isClosed ? 'Uzavretý' : 'Aktívny'} tone={room.isClosed ? 'neutral' : 'blue'} />
+              {room.hasPending ? <Badge text="Čaká vyrovnanie" tone="warning" /> : null}
+            </View>
+          </View>
+
+          <View style={styles.roomCardFooter}>
+            <Text style={styles.roomCardHint}>{room.activityLabel}</Text>
+            <Text style={styles.roomCardHint}>{room.activityHint || 'Bez detailu'}</Text>
+          </View>
+        </View>
+      </ImageBackground>
     </Pressable>
   );
 }
@@ -658,7 +796,19 @@ function TransactionCard({
   );
 }
 
-function MemberRow({ member }: { member: MemberModel }) {
+function MemberRow({
+  member,
+  isOwnerView,
+  isCurrentUser,
+  removing,
+  onRemove,
+}: {
+  member: MemberModel;
+  isOwnerView?: boolean;
+  isCurrentUser?: boolean;
+  removing?: boolean;
+  onRemove?: (iban: string) => void;
+}) {
   return (
     <View style={styles.detailCard}>
       <View style={styles.memberRow}>
@@ -669,7 +819,25 @@ function MemberRow({ member }: { member: MemberModel }) {
             <Text style={styles.detailCardSubtitle}>{member.user_iban}</Text>
           </View>
         </View>
-        <Badge text="Člen" tone="blue" />
+        <View style={styles.memberMetaStack}>
+          <View style={styles.memberBadgeRow}>
+            <Badge text={member.role === 'owner' ? 'Vlastník' : 'Člen'} tone={member.role === 'owner' ? 'neutral' : 'blue'} />
+            {member.spending > 0 ? <Badge text={`${formatAmount(member.spending)} EUR`} tone="success" /> : null}
+          </View>
+          {isOwnerView && !isCurrentUser && onRemove ? (
+            <Pressable
+              onPress={() => onRemove(member.user_iban)}
+              disabled={removing}
+              style={({ pressed }) => [
+                styles.memberRemoveButton,
+                removing && styles.buttonDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.memberRemoveButtonText}>{removing ? 'Odstraňujem…' : 'Odstrániť'}</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -809,7 +977,7 @@ function CreateSpaceModal({
     try {
       const roomIban = `SK${Math.floor(10000000000000000000 + Math.random() * 90000000000000000000)}`;
       await (createRoom as (...args: unknown[]) => Promise<unknown>)(roomIban, name.trim(), 0, currentUserIban, type);
-      await addRoomMember(roomIban, currentUserIban);
+      await addRoomMember(roomIban, currentUserIban, 'owner');
 
       for (const userIban of selectedUserIds) {
         try {
@@ -822,6 +990,8 @@ function CreateSpaceModal({
       if (targetAmount && Number(targetAmount) > 0) {
         await createGoal(roomIban, name.trim(), Number(targetAmount));
       }
+
+      await ensureRoomCover(roomIban);
 
       setName('');
       setTargetAmount('');
@@ -1590,10 +1760,22 @@ function DetailScreen({
   const [parsingReceipt, setParsingReceipt] = useState(false);
   const [activeCheckId, setActiveCheckId] = useState<number | null>(null);
   const [draftItems, setDraftItems] = useState<Record<number, { name: string; amount: string }>>({});
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [editedRoomName, setEditedRoomName] = useState(room.name || '');
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closingRoom, setClosingRoom] = useState(false);
+  const [removingMember, setRemovingMember] = useState<string | null>(null);
   const usersByIban = useMemo(() => new Map(users.map((user) => [user.user_iban, user])), [users]);
   const activeCheck = room.checks.find((check) => check.id === activeCheckId) || null;
   const targetAmount = Number(room.targetAmount || 0);
   const progress = targetAmount > 0 ? Math.max(0, Math.min((room.balance / targetAmount) * 100, 100)) : 0;
+  const currentUserMember = room.members.find((member) => member.user_iban === currentUserIban);
+  const currentUserRole = currentUserMember?.role || 'member';
+  const isOwner = currentUserRole === 'owner';
+
+  useEffect(() => {
+    setEditedRoomName(room.name || '');
+  }, [room.name]);
 
   const updateDraftItem = useCallback((checkId: number, field: 'name' | 'amount', value: string) => {
     setDraftItems((prev) => ({
@@ -1709,11 +1891,105 @@ function DetailScreen({
     }
   };
 
+  const handleCloseRoom = async () => {
+    if (!isOwner) return;
+    setClosingRoom(true);
+    try {
+      await closeRoom(room.room_iban);
+      setShowCloseModal(false);
+      await onRefresh();
+      onBack();
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Chyba', error instanceof Error ? error.message : 'Priestor sa nepodarilo uzatvoriť.');
+    } finally {
+      setClosingRoom(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberIban: string) => {
+    if (!isOwner || memberIban === currentUserIban) {
+      Alert.alert('Nie je možné vykonať akciu', 'Nemôžeš odstrániť seba alebo nemáš oprávnenie.');
+      return;
+    }
+
+    Alert.alert('Odstrániť člena?', 'Člen stratí prístup do priestoru.', [
+      { text: 'Zrušiť', style: 'cancel' },
+      {
+        text: 'Odstrániť',
+        style: 'destructive',
+        onPress: async () => {
+          setRemovingMember(memberIban);
+          try {
+            await removeRoomMember(room.room_iban, memberIban);
+            await onRefresh();
+          } catch (error) {
+            console.error(error);
+            Alert.alert('Chyba', error instanceof Error ? error.message : 'Člena sa nepodarilo odstrániť.');
+          } finally {
+            setRemovingMember(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleEditRoomName = async () => {
+    if (!isOwner || !editedRoomName.trim()) return;
+    try {
+      await updateRoomName(room.room_iban, editedRoomName.trim());
+      setShowEditNameModal(false);
+      await onRefresh();
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Chyba', error instanceof Error ? error.message : 'Názov sa nepodarilo uložiť.');
+    }
+  };
+
   const transactions = [...room.transactions].sort((a, b) => {
     const aTs = a.created_at ? new Date(a.created_at).getTime() : 0;
     const bTs = b.created_at ? new Date(b.created_at).getTime() : 0;
     return bTs - aTs;
   });
+
+  const settlement = useMemo(() => {
+    const remaining = Number(room.balance || 0);
+    if (remaining <= 0) return {} as Record<string, { contribution: number; spending: number; percentOfTotal: number; refund: number }>;
+
+    const memberContributions: Record<string, number> = {};
+    const memberSpending: Record<string, number> = {};
+
+    (room.transactions || []).forEach((tx) => {
+      if (tx.to_iban === room.room_iban && tx.from_iban) {
+        memberContributions[tx.from_iban] = (memberContributions[tx.from_iban] || 0) + Number(tx.amount || 0);
+      }
+    });
+
+    (room.members || []).forEach((member) => {
+      memberSpending[member.user_iban] = member.spending || 0;
+    });
+
+    const totalContributed = Object.values(memberContributions).reduce((sum, amount) => sum + amount, 0);
+    if (totalContributed <= 0) return {};
+
+    return Object.fromEntries(
+      Object.entries(memberContributions).map(([iban, contribution]) => [
+        iban,
+        {
+          contribution,
+          spending: memberSpending[iban] || 0,
+          percentOfTotal: contribution / totalContributed,
+          refund: remaining * (contribution / totalContributed),
+        },
+      ]),
+    );
+  }, [room.balance, room.members, room.room_iban, room.transactions]);
+
+  useEffect(() => {
+    if (tab === 'settlement' && Object.keys(settlement).length === 0) {
+      setTab('transactions');
+    }
+  }, [settlement, tab]);
 
   return (
     <>
@@ -1755,6 +2031,23 @@ function DetailScreen({
                 </View>
               </View>
             ) : null}
+
+            {isOwner ? (
+              <View style={styles.ownerActionRow}>
+                <Pressable
+                  onPress={() => setShowEditNameModal(true)}
+                  style={({ pressed }) => [styles.ownerSecondaryButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.ownerSecondaryButtonText}>Upraviť názov</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setShowCloseModal(true)}
+                  style={({ pressed }) => [styles.ownerDangerButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.ownerDangerButtonText}>Uzatvoriť priestor</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         </ImageBackground>
       </View>
@@ -1763,6 +2056,7 @@ function DetailScreen({
         {[
           { key: 'transactions', label: 'Transakcie' },
           { key: 'members', label: 'Členovia' },
+          ...(Object.keys(settlement).length > 0 ? [{ key: 'settlement', label: 'Vyrovnanie' }] : []),
           { key: 'shopping', label: 'Nákupy' },
           { key: 'send', label: 'Poslať' },
         ].map((item) => (
@@ -1801,12 +2095,61 @@ function DetailScreen({
         {tab === 'members' ? (
           <>
             {room.members.map((member) => (
-              <MemberRow key={member.user_iban} member={member} />
+              <MemberRow
+                key={member.user_iban}
+                member={member}
+                isOwnerView={isOwner}
+                isCurrentUser={member.user_iban === currentUserIban}
+                removing={removingMember === member.user_iban}
+                onRemove={handleRemoveMember}
+              />
             ))}
             <Pressable onPress={() => setShowAddMember(true)} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
               <Text style={styles.primaryButtonText}>Pozvať člena</Text>
             </Pressable>
           </>
+        ) : null}
+
+        {tab === 'settlement' ? (
+          <View style={styles.detailSectionStack}>
+            <View style={styles.infoCard}>
+              <Text style={styles.formTitle}>Vyrovnanie zostatku</Text>
+              <Text style={styles.infoText}>
+                Zostatok {formatAmount(room.balance)} EUR sa rozdelí medzi členov podľa ich príspevkov do priestoru.
+              </Text>
+            </View>
+
+            {Object.entries(settlement).map(([memberIban, data]) => {
+              const member = room.members.find((item) => item.user_iban === memberIban);
+              return (
+                <View key={memberIban} style={styles.detailCard}>
+                  <View style={styles.settlementRow}>
+                    <View style={styles.settlementMemberMain}>
+                      <Avatar label={member?.avatar || '?'} color={member?.color || COLORS.bgCardAlt} />
+                      <View style={styles.settlementMemberCopy}>
+                        <Text style={styles.detailCardTitle}>{member?.name || memberIban}</Text>
+                        <Text style={styles.settlementStat}>Príspevok: {formatAmount(data.contribution)} EUR</Text>
+                        <Text style={styles.settlementStat}>Nákup: {formatAmount(data.spending)} EUR</Text>
+                      </View>
+                    </View>
+                    <View style={styles.settlementAmountWrap}>
+                      <Text style={styles.settlementPercent}>{Math.round(data.percentOfTotal * 100)}%</Text>
+                      <Text style={[styles.detailCardAmount, styles.positiveAmount]}>+{formatAmount(data.refund)} EUR</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+
+            {isOwner && room.balance > 0 ? (
+              <Pressable
+                onPress={() => setShowCloseModal(true)}
+                style={({ pressed }) => [styles.ownerSettlementButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.ownerSettlementButtonText}>Vyrovnať a uzatvoriť priestor</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         {tab === 'shopping' ? (
@@ -1877,6 +2220,61 @@ function DetailScreen({
         onAdded={onRefresh}
       />
       <InviteShareModal visible={showInviteShare} room={room} onClose={() => setShowInviteShare(false)} />
+      <ModalFrame
+        visible={showEditNameModal}
+        title="Upraviť názov"
+        subtitle={room.room_iban}
+        onClose={() => setShowEditNameModal(false)}
+      >
+        <TextInput
+          style={styles.input}
+          value={editedRoomName}
+          onChangeText={setEditedRoomName}
+          placeholder="Názov priestoru"
+          placeholderTextColor={COLORS.textMuted}
+        />
+        <Pressable
+          onPress={() => void handleEditRoomName()}
+          disabled={!editedRoomName.trim()}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            !editedRoomName.trim() && styles.buttonDisabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.primaryButtonText}>Uložiť názov</Text>
+        </Pressable>
+      </ModalFrame>
+      <ModalFrame
+        visible={showCloseModal}
+        title="Uzatvoriť priestor"
+        subtitle="Priestor sa označí ako uzavretý a zostane iba na prehľad."
+        onClose={() => setShowCloseModal(false)}
+      >
+        <View style={styles.infoCard}>
+          <Text style={styles.formTitle}>{room.name || room.room_iban}</Text>
+          <Text style={styles.infoText}>
+            Ak chceš priestor ukončiť, odporúča sa najprv skontrolovať vyrovnanie a otvorené nákupy.
+          </Text>
+        </View>
+        <View style={styles.dualActionRow}>
+          <Pressable onPress={() => setShowCloseModal(false)} style={({ pressed }) => [styles.secondaryButton, styles.flexButton, pressed && styles.pressed]}>
+            <Text style={styles.secondaryButtonText}>Zrušiť</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void handleCloseRoom()}
+            disabled={closingRoom}
+            style={({ pressed }) => [
+              styles.ownerDangerButton,
+              styles.flexButton,
+              closingRoom && styles.buttonDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            {closingRoom ? <ActivityIndicator color={COLORS.textPrimary} /> : <Text style={styles.ownerDangerButtonText}>Uzatvoriť</Text>}
+          </Pressable>
+        </View>
+      </ModalFrame>
       <ShoppingCheckModal
         visible={Boolean(activeCheck)}
         check={activeCheck}
@@ -2110,7 +2508,7 @@ function ErrorScreen({
 
 function noop() {}
 
-export default function SharedSpacesNativeScreen() {
+export default function SharedSpacesRoute() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ invite?: string | string[] }>();
@@ -2196,9 +2594,16 @@ export default function SharedSpacesNativeScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
       <View style={styles.phone}>
-        <View style={[styles.screenContainer, { paddingHorizontal: sectionPaddingX, paddingBottom: insets.bottom + 18 }]}>
-          <FakeStatusBar compact={compact} />
-
+        <View
+          style={[
+            styles.screenContainer,
+            {
+              paddingHorizontal: sectionPaddingX,
+              paddingTop: compact ? 14 : 18,
+              paddingBottom: insets.bottom + 18,
+            },
+          ]}
+        >
           {loading ? (
             <LoadingScreen />
           ) : error || !data ? (
@@ -2282,14 +2687,11 @@ export default function SharedSpacesNativeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: COLORS.bgBlack,
-    alignItems: 'center',
+    backgroundColor: COLORS.bgPage,
   },
   phone: {
     flex: 1,
     width: '100%',
-    maxWidth: 390,
-    alignSelf: 'center',
     backgroundColor: COLORS.bgPage,
   },
   screenContainer: {
@@ -2299,25 +2701,6 @@ const styles = StyleSheet.create({
   pageContent: {
     gap: 18,
     paddingBottom: 20,
-  },
-  statusBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  statusBarText: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  statusBarTextCompact: {
-    fontSize: 14,
-  },
-  statusBarRight: {
-    flexDirection: 'row',
-    gap: 8,
   },
   centerStage: {
     flex: 1,
@@ -2664,14 +3047,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   roomCard: {
-    backgroundColor: COLORS.bgCard,
     borderRadius: 18,
-    padding: 16,
     borderWidth: 1,
     borderColor: COLORS.cardLine,
-    gap: 14,
     position: 'relative',
     overflow: 'hidden',
+  },
+  roomCardBackground: {
+    minHeight: 168,
+  },
+  roomCardBackgroundImage: {
+    opacity: 0.3,
+  },
+  roomCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(18,19,24,0.8)',
+  },
+  roomCardInner: {
+    padding: 16,
+    gap: 14,
   },
   roomAccent: {
     position: 'absolute',
@@ -2854,6 +3248,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  ownerActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   iconAction: {
     width: 42,
     height: 42,
@@ -2909,6 +3307,53 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
     backgroundColor: COLORS.accentBlue,
+  },
+  ownerSecondaryButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(16,17,21,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  ownerSecondaryButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ownerDangerButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(195,98,89,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(195,98,89,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  ownerDangerButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ownerSettlementButton: {
+    minHeight: 50,
+    borderRadius: 16,
+    backgroundColor: 'rgba(57,198,155,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(57,198,155,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  ownerSettlementButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
   },
   detailTabRow: {
     gap: 8,
@@ -2981,6 +3426,60 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
     alignItems: 'center',
+  },
+  memberMetaStack: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  memberBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  memberRemoveButton: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.dangerBg,
+    borderWidth: 1,
+    borderColor: 'rgba(195,98,89,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberRemoveButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  settlementRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 14,
+  },
+  settlementMemberMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  settlementMemberCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  settlementStat: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+  },
+  settlementAmountWrap: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  settlementPercent: {
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
   },
   shoppingCard: {
     backgroundColor: COLORS.bgCard,
@@ -3072,6 +3571,9 @@ const styles = StyleSheet.create({
   dualActionRow: {
     flexDirection: 'row',
     gap: 10,
+  },
+  flexButton: {
+    flex: 1,
   },
   infoText: {
     color: COLORS.textSecondary,
