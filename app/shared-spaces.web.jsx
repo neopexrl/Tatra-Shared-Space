@@ -2259,6 +2259,8 @@ export default function SharedSpacesWebPage() {
   const resolvedCurrentUserIban = (data?.users || []).some((user) => user.user_iban === currentUserIban)
     ? currentUserIban
     : data?.users?.[0]?.user_iban || null;
+  const currentUser = (data?.users || []).find((user) => user.user_iban === resolvedCurrentUserIban) || null;
+  const currentUserBalance = Number(currentUser?.balance || 0);
   const myRoomModels = resolvedCurrentUserIban
     ? roomModels.filter((room) => room.members.some((member) => member.user_iban === resolvedCurrentUserIban))
     : roomModels;
@@ -2357,6 +2359,10 @@ export default function SharedSpacesWebPage() {
         <div className="ss-kpi-card">
           <span className="ss-kpi-label">ČAKAJÚCE VYROVNANIA</span>
           <strong className="ss-kpi-value">{pendingSettlements}</strong>
+        </div>
+        <div className="ss-kpi-card">
+          <span className="ss-kpi-label">MÔJ ZOSTATOK</span>
+          <strong className="ss-kpi-value">{formatAmount(currentUserBalance)} EUR</strong>
         </div>
         <div className="ss-kpi-card">
           <span className="ss-kpi-label">UZAVRETÉ PRIESTORY</span>
