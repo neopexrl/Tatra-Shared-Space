@@ -501,34 +501,46 @@ function InviteModal({ room, onClose }) {
 
   return (
     <div className="ss-modal-backdrop" onClick={onClose}>
-      <div className="ss-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="ss-modal-header">
-          <h2>Pozvánka do priestoru</h2>
-          <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
+      <div className="ss-modal ss-invite-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ss-modal-header ss-invite-modal-header">
+          <div className="ss-invite-header-copy">
+            <span className="ss-invite-eyebrow">Zdielanie priestoru</span>
+            <h2>Pozvánka do priestoru</h2>
+          </div>
+          <button className="ss-close-btn" type="button" onClick={onClose} aria-label="Zavrieť">
+            ×
+          </button>
         </div>
-        <div className="ss-modal-body">
-          <p style={{ color: '#bfc1c8', marginBottom: 12 }}>
-            Odkaz možno poslať komukoľvek. Prijímateľ si potom vyberie účet z existujúcich používateľov.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="ss-modal-body ss-invite-modal-body">
+          <div className="ss-invite-intro">
+            <p>
+              Odkaz možno poslať komukoľvek. Prijímateľ si potom vyberie účet z existujúcich používateľov.
+            </p>
+          </div>
+
+          <div className="ss-invite-link-panel">
+            <label className="ss-label">Priamy odkaz</label>
+            <div className="ss-invite-link-row">
               <input
                 className="ss-input"
                 readOnly
                 value={inviteUrl}
                 style={{ flex: 1, minWidth: 0 }}
               />
-              <button className="ss-btn ss-btn-primary" type="button" onClick={handleCopy}>
+              <button className="ss-btn ss-btn-primary ss-invite-copy-btn" type="button" onClick={handleCopy}>
                 {copied ? 'Skopírované' : 'Kopírovať'}
               </button>
             </div>
-            {qrSrc && (
-              <div style={{ display: 'grid', placeItems: 'center', gap: 10 }}>
-                <img src={qrSrc} alt="QR kód pozvánky" style={{ width: 220, height: 220, borderRadius: 14, background: '#111' }} />
-                <small style={{ color: '#8a8c92' }}>Naskenujte QR kód na priamu pozvánku.</small>
-              </div>
-            )}
           </div>
+
+          {qrSrc && (
+            <div className="ss-invite-qr-panel">
+              <div className="ss-invite-qr-frame">
+                <img className="ss-invite-qr-image" src={qrSrc} alt="QR kód pozvánky" />
+              </div>
+              <small className="ss-invite-qr-note">Naskenujte QR kód na priamu pozvánku.</small>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1647,6 +1659,37 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
   const [targetAmount, setTargetAmount] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [loading, setLoading] = useState(false);
+  const typeOptions = [
+    {
+      type: 'trip',
+      icon: 'T',
+      label: 'Vylet',
+      blurb: 'Cesty, vikendy a spolocne zazitky',
+      image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80',
+    },
+    {
+      type: 'flat',
+      icon: 'B',
+      label: 'Byvanie',
+      blurb: 'Najom, energie a domace vydavky',
+      image: 'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=900&q=80',
+    },
+    {
+      type: 'gift',
+      icon: 'D',
+      label: 'Darcek',
+      blurb: 'Zbierka na darcek alebo event',
+      image: 'https://images.unsplash.com/photo-1512909006721-3d6018887383?auto=format&fit=crop&w=900&q=80',
+    },
+    {
+      type: 'other',
+      icon: 'S',
+      label: 'Ine',
+      blurb: 'Flexibilny priestor pre cokolvek',
+      image: 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=900&q=80',
+    },
+  ];
+  const inviteCandidates = (allUsers || []).filter((u) => u.user_iban !== currentUserIban);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -1685,16 +1728,14 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
   };
 
   const toggleUser = (userId) => {
-    if (selectedUserIds.includes(userId)) {
-      setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
-    } else {
-      setSelectedUserIds([...selectedUserIds, userId]);
-    }
+    setSelectedUserIds((current) =>
+      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
+    );
   };
 
   return (
     <div className="ss-modal-backdrop" onClick={onClose}>
-      <div className="ss-modal" onClick={e => e.stopPropagation()}>
+      <div className="ss-modal ss-create-space-modal" onClick={e => e.stopPropagation()}>
         <div className="ss-modal-header">
           <h2>Novy Shared Space</h2>
           <button className="ss-close-btn" type="button" onClick={onClose}>x</button>
@@ -1704,16 +1745,26 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
           <input className="ss-input" type="text" placeholder="napr. Tatry Trip, Byt Kosicka..." value={name} onChange={e => setName(e.target.value)} />
 
           <label className="ss-label">Typ</label>
-          <div className="ss-type-picker" style={{ marginBottom: 16 }}>
-            {[
-              { type: 'trip', icon: 'T', label: 'Vylet' },
-              { type: 'flat', icon: 'B', label: 'Byvanie' },
-              { type: 'gift', icon: 'D', label: 'Darcek' },
-              { type: 'other', icon: 'S', label: 'Ine' },
-            ].map(t => (
-              <button key={t.type} className={`ss-type-btn ${type === t.type ? 'active' : ''}`} type="button" onClick={() => setType(t.type)} style={type === t.type ? { borderColor: 'var(--tb-blue)', background: 'rgba(0,151,230,0.1)' } : {}}>
-                <span>{t.icon}</span>
-                <span>{t.label}</span>
+          <div className="ss-type-picker ss-type-picker-rich" style={{ marginBottom: 16 }}>
+            {typeOptions.map((t) => (
+              <button
+                key={t.type}
+                className={`ss-type-btn ss-type-card ${type === t.type ? 'active' : ''}`}
+                type="button"
+                onClick={() => setType(t.type)}
+              >
+                <span
+                  className="ss-type-btn-media"
+                  aria-hidden="true"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, rgba(9,11,16,0.34) 0%, rgba(9,11,16,0.74) 100%), url("${t.image}")`,
+                  }}
+                />
+                <span className="ss-type-btn-content">
+                  <span className="ss-type-btn-badge">{t.icon}</span>
+                  <span className="ss-type-btn-title">{t.label}</span>
+                  <span className="ss-type-btn-subtitle">{t.blurb}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -1722,13 +1773,34 @@ function CreateSpaceModal({ onClose, onCreated, allUsers, currentUserIban }) {
           <input className="ss-input" type="number" placeholder="napr. 500" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} style={{ marginBottom: 16 }} />
 
           <label className="ss-label">Pozvat clenov (dostanu pozvanku)</label>
-          <div style={{ maxHeight: 150, overflowY: 'auto', background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: 8, marginBottom: 16 }}>
-            {allUsers && allUsers.filter(u => u.user_iban !== currentUserIban).map(u => (
-              <label key={u.user_iban} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, cursor: 'pointer', color: 'white' }}>
-                <input type="checkbox" checked={selectedUserIds.includes(u.user_iban)} onChange={() => toggleUser(u.user_iban)} />
-                {u.name || u.user_iban}
-              </label>
-            ))}
+          <div className="ss-member-picker">
+            {inviteCandidates.map((u, index) => {
+              const isSelected = selectedUserIds.includes(u.user_iban);
+              return (
+                <button
+                  key={u.user_iban}
+                  type="button"
+                  className={`ss-member-option ${isSelected ? 'is-selected' : ''}`}
+                  onClick={() => toggleUser(u.user_iban)}
+                >
+                  <span
+                    className="ss-member-option-avatar"
+                    style={{ background: MEMBER_COLORS[index % MEMBER_COLORS.length] }}
+                  >
+                    {getInitial(u.name || u.user_iban)}
+                  </span>
+                  <span className="ss-member-option-copy">
+                    <span className="ss-member-option-name">{u.name || u.user_iban}</span>
+                    <span className="ss-member-option-meta">
+                      {isSelected ? 'Pozvanka bude odoslana' : 'Klepnutim oznacis ucet'}
+                    </span>
+                  </span>
+                  <span className="ss-member-option-mark" aria-hidden="true">
+                    {isSelected ? '✓' : '+'}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           <button className="ss-btn ss-btn-primary" type="button" style={{ width: '100%' }} disabled={!name.trim() || loading} onClick={handleCreate}>
@@ -2219,42 +2291,51 @@ export default function SharedSpacesWebPage() {
           </div>
         </div>
         <div className="ss-dashboard-actions">
-          <label className="ss-dashboard-user-field">
-            <span>Účet</span>
-            <select
-              value={resolvedCurrentUserIban || ''}
-              onChange={(event) => handleUserSwitch(event.target.value)}
+          <div className="ss-dashboard-toolbar">
+            <label className="ss-dashboard-user-field">
+              <span className="ss-dashboard-toolbar-label">Účet</span>
+              <select
+                value={resolvedCurrentUserIban || ''}
+                onChange={(event) => handleUserSwitch(event.target.value)}
+              >
+                {(data?.users || []).map((user) => (
+                  <option key={user.user_iban} value={user.user_iban}>
+                    {user.name || user.user_iban}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="ss-dashboard-toolbar-divider" aria-hidden="true" />
+
+            <button
+              className="ss-dashboard-utility-btn ss-dashboard-utility-btn-pill"
+              type="button"
+              onClick={() => setShowInvites(true)}
             >
-              {(data?.users || []).map((user) => (
-                <option key={user.user_iban} value={user.user_iban}>
-                  {user.name || user.user_iban}
-                </option>
-              ))}
-            </select>
-          </label>
+              <span className="ss-dashboard-utility-label">Pozvánky</span>
+              {pendingInviteCount > 0 && (
+                <span className="ss-dashboard-utility-count">{pendingInviteCount}</span>
+              )}
+            </button>
 
-          <button
-            className="ss-dashboard-utility-btn"
-            type="button"
-            onClick={() => setShowInvites(true)}
-          >
-            Pozvánky
-            {pendingInviteCount > 0 && (
-              <span className="ss-dashboard-utility-count">{pendingInviteCount}</span>
-            )}
-          </button>
-
-          <button
-            className="ss-dashboard-utility-btn ss-dashboard-utility-btn-icon"
-            type="button"
-            aria-label="Notifikácie"
-            onClick={() => setShowNotifications(true)}
-          >
-            <span aria-hidden="true">🔔</span>
-            {unreadCount > 0 && (
-              <span className="ss-dashboard-utility-count">{unreadCount}</span>
-            )}
-          </button>
+            <button
+              className="ss-dashboard-utility-btn ss-dashboard-utility-btn-bell"
+              type="button"
+              aria-label="Notifikácie"
+              onClick={() => setShowNotifications(true)}
+            >
+              <span className="ss-dashboard-bell-icon" aria-hidden="true">
+                <span className="ss-dashboard-bell-cap" />
+                <span className="ss-dashboard-bell-body" />
+                <span className="ss-dashboard-bell-clapper" />
+              </span>
+              <span className="ss-dashboard-utility-label">Notifikácie</span>
+              {unreadCount > 0 && (
+                <span className="ss-dashboard-utility-count">{unreadCount}</span>
+              )}
+            </button>
+          </div>
 
           <button className="ss-dashboard-link" type="button" onClick={() => router.push('/')}>
             Späť na prehľad
