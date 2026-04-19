@@ -2392,6 +2392,7 @@ select {
   padding: 18px 22px;
   background: rgba(36, 38, 43, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 10px;
 }
 
 .ss-kpi-card {
@@ -3458,7 +3459,7 @@ select {
 
 .ss-detail-member-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
   align-items: center;
   gap: 14px;
   min-height: 72px;
@@ -3486,6 +3487,14 @@ select {
   font-weight: 700;
 }
 
+.ss-details-member-role,
+.ss-member-role {
+  color: #6e7076;
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
 .ss-detail-member-copy span {
   color: #8d9097;
   font-size: 12px;
@@ -3502,6 +3511,9 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   padding: 18px;
+  background: rgba(20, 21, 26, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
 }
 
 .ss-detail-info-card {
@@ -3515,8 +3527,9 @@ select {
 
 .ss-detail-account-box {
   padding: 11px 12px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #d7d8dc;
   font-size: 14px;
 }
@@ -4280,22 +4293,43 @@ select {
 .ss-input {
   width: 100%;
   padding: 11px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #f2f2f4;
   font-size: 14px;
   font-family: inherit;
   outline: none;
-  transition: border-color .18s;
+  transition: border-color .18s, background-color .18s;
 }
 
 .ss-input:focus {
   border-color: var(--tb-blue, #0097e6);
+  background-color: rgba(255, 255, 255, 0.09);
 }
 
 .ss-input::placeholder {
-  color: #5a5c62;
+  color: #8e9095;
+}
+
+select.ss-input {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23d7d8dc' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 10px 6px;
+  padding-right: 40px;
+}
+
+select.ss-input option {
+  background-color: #15161b;
+  color: #f2f2f4;
+}
+
+select.ss-input::-ms-expand {
+  display: none;
 }
 
 /* receipt scanner */
@@ -4859,7 +4893,15 @@ select {
 .ss-detail-member-meta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  min-width: 0;
+}
+
+.ss-spending-badge {
+  font-size: 13px;
+  color: #8f9298;
+  white-space: nowrap;
 }
 
 .ss-remove-btn {

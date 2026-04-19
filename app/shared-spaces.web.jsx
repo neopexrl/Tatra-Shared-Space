@@ -1020,14 +1020,14 @@ function RoomDetail({ room, users, currentUserIban, onBack, onRefresh }) {
                       {m.avatar}
                     </span>
                     <div className="ss-detail-member-copy">
-                      <strong>{m.name}</strong>
+                      <strong>
+                        {m.name}
+                        <span className="ss-member-role">({m.role === 'owner' ? 'Vlastník' : 'Člen'})</span>
+                      </strong>
                       <span>{m.user_iban}</span>
                     </div>
                   </div>
                   <div className="ss-detail-member-meta">
-                    <span className={`ss-state-badge ${m.role === 'owner' ? 'is-owner' : 'is-active'}`}>
-                      {m.role === 'owner' ? 'Vlastník' : 'Člen'}
-                    </span>
                     {m.spending > 0 && (
                       <span className="ss-spending-badge">{formatAmount(m.spending)} EUR (nákup)</span>
                     )}
