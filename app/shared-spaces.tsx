@@ -2411,6 +2411,8 @@ function SharedSpacesListScreen({
       .slice(0, 5);
   }, [myRooms, usersByIban]);
 
+  const currentUser = currentUserIban ? usersByIban.get(currentUserIban) || null : null;
+  const currentUserBalance = Number(currentUser?.balance || 0);
   const totalBalance = myRooms.reduce((sum, room) => sum + room.balance, 0);
   const activeSpaces = myRooms.filter((room) => room.isActive).length;
   const closedSpaces = myRooms.length - activeSpaces;
@@ -2440,6 +2442,7 @@ function SharedSpacesListScreen({
 
       <View style={styles.statGrid}>
         <StatCard label="Celkový zostatok" value={`${formatAmount(totalBalance)} EUR`} />
+        <StatCard label="Môj zostatok" value={`${formatAmount(currentUserBalance)} EUR`} />
         <StatCard label="Aktívne priestory" value={String(activeSpaces)} />
         <StatCard label="Čakajúce vyrovnania" value={String(pendingSettlements)} />
         <StatCard label="Uzavreté priestory" value={String(closedSpaces)} />
