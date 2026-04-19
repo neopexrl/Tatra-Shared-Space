@@ -2519,7 +2519,11 @@ export default function SharedSpacesRoute() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUserIban, setCurrentUserIban] = useState<string | null>(null);
-  const [selectedRoomIban, setSelectedRoomIban] = useState<string | null>(null);
+  const { room } = useLocalSearchParams<{ room: string }>();
+  const selectedRoomIban = room || null;
+  const setSelectedRoomIban = (iban: string | null) => {
+    router.setParams({ room: iban || '' });
+  };
   const [showCreate, setShowCreate] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInvites, setShowInvites] = useState(false);
