@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
+  type DimensionValue,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -104,8 +108,54 @@ const BOTTOM_NAV = [
   { id: 'more', icon: '≡', label: 'More' },
 ];
 
+const SPOLU_HERO_COVERS = [
+  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80',
+  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1400&q=80',
+  'https://images.unsplash.com/photo-1505764706515-aa95265c5abc?auto=format&fit=crop&w=1400&q=80',
+];
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function formatAmount(value: number) {
+  return value.toLocaleString('sk-SK', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function parseAmountString(value: string) {
+  return Number(value.replace(/\s/g, '').replace(',', '.')) || 0;
+}
+
+function useSoftLoop(duration = 2600, delay = 0) {
+  const value = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(value, {
+          toValue: 1,
+          duration,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(value, {
+          toValue: 0,
+          duration,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [delay, duration, value]);
+
+  return value;
 }
 
 function ActionLink({
@@ -127,9 +177,11 @@ function ActionLink({
 function TbLogo({ compact }: { compact: boolean }) {
   return (
     <View style={[styles.tbLogo, compact && styles.tbLogoCompact]} accessibilityLabel="Tatra banka logo">
-      <View style={styles.tbLogoBar} />
-      <View style={styles.tbLogoBar} />
-      <View style={styles.tbLogoBar} />
+      <Image
+        source={require('../assets/brand/tatra-logo.png')}
+        style={styles.tbLogoImage}
+        resizeMode="contain"
+      />
     </View>
   );
 }
@@ -200,13 +252,15 @@ function Avatar({
 function RoomCard({
   room,
   compact,
+  onPress,
 }: {
   room: (typeof SPOLU_ROOMS)[number];
   compact: boolean;
+  onPress: () => void;
 }) {
   return (
     <Pressable
-      onPress={() => router.push('/shared-spaces')}
+      onPress={onPress}
       style={({ pressed }) => [
         styles.roomCard,
         compact && styles.roomCardCompact,
@@ -248,6 +302,136 @@ function RoomCard({
   );
 }
 
+function SpoluHeroCard({
+  compact,
+  onPress,
+}: {
+  compact: boolean;
+  onPress: () => void;
+}) {
+  const [coverIndex, setCoverIndex] = useState(0);
+  const [nextCoverIndex, setNextCoverIndex] = useState(1);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const next = (coverIndex + 1) % SPOLU_HERO_COVERS.length;
+      setNextCoverIndex(next);
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 820,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) {
+          setCoverIndex(next);
+          fadeAnim.setValue(0);
+        }
+      });
+    }, 3800);
+
+    return () => clearInterval(interval);
+  }, [coverIndex, fadeAnim]);
+
+  const totalBalance = useMemo(
+    () => SPOLU_ROOMS.reduce((sum, room) => sum + parseAmountString(room.balance), 0),
+    []
+  );
+  const pendingCount = SPOLU_ROOMS.filter((room) => room.tone === 'owe').length;
+  const combinedAvatars = SPOLU_ROOMS.flatMap((room) => room.avatars).slice(0, 4);
+  const maxBalance = Math.max(...SPOLU_ROOMS.map((room) => parseAmountString(room.balance)), 1);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.spoluHeroCard, compact && styles.spoluHeroCardCompact, pressed && styles.spoluHeroCardPressed]}
+    >
+      <Image source={{ uri: SPOLU_HERO_COVERS[coverIndex] }} style={styles.spoluHeroImage} resizeMode="cover" />
+      <Animated.Image
+        source={{ uri: SPOLU_HERO_COVERS[nextCoverIndex] }}
+        style={[styles.spoluHeroImage, { opacity: fadeAnim }]}
+        resizeMode="cover"
+      />
+      <View style={styles.spoluHeroImageTint} pointerEvents="none" />
+      <View style={styles.spoluHeroContent}>
+        <View style={styles.spoluHeroHeader}>
+          <View style={styles.spoluHeroTitleWrap}>
+            <Text style={[styles.spoluHeroTitle, compact && styles.spoluHeroTitleCompact]}>Spoločné výdavky</Text>
+            <Text style={[styles.spoluHeroSubtitle, compact && styles.spoluHeroSubtitleCompact]}>
+              Správa priestorov, príspevkov a vyrovnaní v jednom module.
+            </Text>
+          </View>
+          <View style={styles.spoluHeroBadge}>
+            <Text style={styles.spoluHeroBadgeText}>NOVÉ</Text>
+          </View>
+        </View>
+
+        <View style={styles.spoluHeroStatsRow}>
+          <View style={styles.spoluHeroStat}>
+            <Text style={styles.spoluHeroStatValue}>{SPOLU_ROOMS.length}</Text>
+            <Text style={styles.spoluHeroStatLabel}>Priestory</Text>
+          </View>
+          <View style={styles.spoluHeroStat}>
+            <Text style={styles.spoluHeroStatValue}>{SPOLU_ROOMS.length}</Text>
+            <Text style={styles.spoluHeroStatLabel}>Aktívne</Text>
+          </View>
+          <View style={styles.spoluHeroStat}>
+            <Text style={styles.spoluHeroStatValue}>{pendingCount}</Text>
+            <Text style={styles.spoluHeroStatLabel}>Čaká na úhradu</Text>
+          </View>
+        </View>
+
+        <View style={styles.spoluHeroBalanceRow}>
+          <View style={styles.spoluHeroBalanceCopy}>
+            <Text style={styles.spoluHeroBalanceLabel}>Spoločný zostatok</Text>
+            <Text style={[styles.spoluHeroBalanceValue, compact && styles.spoluHeroBalanceValueCompact]}>
+              {totalBalance.toLocaleString('sk-SK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR
+            </Text>
+          </View>
+          <View style={styles.spoluHeroButton}>
+            <Text style={styles.spoluHeroButtonText}>Otvoriť</Text>
+          </View>
+        </View>
+
+        <View style={styles.spoluHeroFooter}>
+          <View style={styles.spoluHeroPeopleRow}>
+            <View style={styles.avatarRow}>
+              {combinedAvatars.map((avatar, index) => (
+                <Avatar
+                  key={`spolu-hero-${avatar.label}-${index}`}
+                  label={avatar.label}
+                  color={avatar.color}
+                  first={index === 0}
+                />
+              ))}
+            </View>
+            <Text style={[styles.spoluHeroFooterSummary, compact && styles.metaCompact]}>
+              {SPOLU_ROOMS.length} priestory • {formatAmount(totalBalance)} EUR celkom
+            </Text>
+          </View>
+
+          <View style={styles.spoluHeroMiniList}>
+            {SPOLU_ROOMS.map((room) => {
+              const amount = parseAmountString(room.balance);
+              const width = `${Math.max(12, (amount / maxBalance) * 100)}%` as DimensionValue;
+
+              return (
+                <View key={room.id} style={styles.spoluHeroMiniRow}>
+                  <Text numberOfLines={1} style={styles.spoluHeroMiniName}>{room.name}</Text>
+                  <View style={styles.spoluHeroMiniTrack}>
+                    <View style={[styles.spoluHeroMiniFill, { width, backgroundColor: room.accent }]} />
+                  </View>
+                  <Text style={styles.spoluHeroMiniAmount}>{room.balance} EUR</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
 function Sparkline({ compact }: { compact: boolean }) {
   const heights = [16, 28, 22, 34, 25, 40, 29, 42];
 
@@ -263,10 +447,61 @@ function Sparkline({ compact }: { compact: boolean }) {
 }
 
 function CardVisual({ compact }: { compact: boolean }) {
+  const glowOne = useSoftLoop(3200, 0);
+  const glowTwo = useSoftLoop(3800, 240);
+
   return (
     <View style={[styles.cardVisual, compact && styles.cardVisualCompact]}>
-      <View style={styles.cardGlowOne} />
-      <View style={styles.cardGlowTwo} />
+      <Animated.View
+        style={[
+          styles.cardGlowOne,
+          {
+            opacity: glowOne.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.24, 0.4],
+            }),
+            transform: [
+              {
+                translateX: glowOne.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-8, 12],
+                }),
+              },
+              {
+                translateY: glowOne.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -6],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.cardGlowTwo,
+          {
+            opacity: glowTwo.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.3, 0.52],
+            }),
+            transform: [
+              {
+                translateX: glowTwo.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -14],
+                }),
+              },
+              {
+                translateY: glowTwo.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [6, -4],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
       <Text style={styles.cardVisa}>VISA</Text>
       <View style={styles.cardChip} />
       <View style={styles.cardStripe} />
@@ -277,38 +512,45 @@ function CardVisual({ compact }: { compact: boolean }) {
 function QuickPayItem({
   item,
   compact,
+  index,
 }: {
   item: (typeof QUICK_PAY)[number];
   compact: boolean;
+  index: number;
 }) {
+  const pulse = useSoftLoop(2100, index * 180);
+
   return (
-    <Pressable onPress={noop} style={styles.quickPayItem}>
-      <View style={[styles.quickPayAvatar, { backgroundColor: item.color }]}>
-        <Text style={styles.quickPayAvatarText}>{item.label}</Text>
+    <Pressable onPress={noop} style={({ pressed }) => [styles.quickPayItem, pressed && styles.quickPayItemPressed]}>
+      <View style={styles.quickPayAvatarWrap}>
+        <Animated.View
+          style={[
+            styles.quickPayAvatarAura,
+            {
+              backgroundColor: item.color,
+              opacity: pulse.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.08, 0.22],
+              }),
+              transform: [
+                {
+                  scale: pulse.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.92, 1.08],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+        <View style={[styles.quickPayAvatar, { backgroundColor: item.color }]}>
+          <Text style={styles.quickPayAvatarText}>{item.label}</Text>
+        </View>
       </View>
       <Text numberOfLines={2} style={[styles.quickPayName, compact && styles.quickPayNameCompact]}>
         {item.name}
       </Text>
     </Pressable>
-  );
-}
-
-function DonutChart() {
-  return (
-    <View style={styles.donutWrap}>
-      <View style={styles.donutBase} />
-      <View style={[styles.donutArc, styles.donutArcGrey]} />
-      <View style={[styles.donutArc, styles.donutArcOrange]} />
-      <View style={[styles.donutArc, styles.donutArcYellow]} />
-      <View style={[styles.donutArc, styles.donutArcBlue]} />
-      <View style={[styles.donutArc, styles.donutArcCyan]} />
-      <View style={styles.donutHole} />
-      <Text style={[styles.donutShareLabel, styles.share60]}>60%</Text>
-      <Text style={[styles.donutShareLabel, styles.share17]}>17%</Text>
-      <Text style={[styles.donutShareLabel, styles.share9Left]}>9%</Text>
-      <Text style={[styles.donutShareLabel, styles.share9Top]}>9%</Text>
-      <Text style={[styles.donutShareLabel, styles.share5]}>5%</Text>
-    </View>
   );
 }
 
@@ -335,26 +577,90 @@ function LegendItem({
 }
 
 function PhotoStack() {
+  const float = useSoftLoop(2800, 120);
+
   return (
-    <View style={styles.photoStack}>
+    <Animated.View
+      style={[
+        styles.photoStack,
+        {
+          transform: [
+            {
+              translateY: float.interpolate({
+                inputRange: [0, 1],
+                outputRange: [2, -4],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
       <View style={[styles.photoCard, styles.photoOne]} />
       <View style={[styles.photoCard, styles.photoTwo]} />
       <View style={[styles.photoCard, styles.photoThree]} />
-    </View>
+    </Animated.View>
   );
 }
 
 function MapPlaceholder() {
+  const pinPulse = useSoftLoop(1900, 0);
+  const pinPulseAlt = useSoftLoop(2200, 280);
+
   return (
     <View style={styles.mapPlaceholder}>
       <View style={styles.mapCanvas}>
         <View style={[styles.mapStroke, styles.mapStrokeOne]} />
         <View style={[styles.mapStroke, styles.mapStrokeTwo]} />
-        <View style={[styles.mapPin, styles.mapPinOne]} />
-        <View style={[styles.mapPin, styles.mapPinTwo]} />
-        <View style={[styles.mapPin, styles.mapPinThree]} />
-        <View style={[styles.mapPin, styles.mapPinFour]} />
-        <View style={[styles.mapPin, styles.mapPinFive]} />
+        <Animated.View
+          style={[
+            styles.mapPin,
+            styles.mapPinOne,
+            {
+              transform: [{ scale: pinPulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.1] }) }],
+              opacity: pinPulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }),
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.mapPin,
+            styles.mapPinTwo,
+            {
+              transform: [{ scale: pinPulseAlt.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.1] }) }],
+              opacity: pinPulseAlt.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }),
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.mapPin,
+            styles.mapPinThree,
+            {
+              transform: [{ scale: pinPulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.08] }) }],
+              opacity: pinPulse.interpolate({ inputRange: [0, 1], outputRange: [0.68, 0.96] }),
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.mapPin,
+            styles.mapPinFour,
+            {
+              transform: [{ scale: pinPulseAlt.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.08] }) }],
+              opacity: pinPulseAlt.interpolate({ inputRange: [0, 1], outputRange: [0.68, 0.96] }),
+            },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.mapPin,
+            styles.mapPinFive,
+            {
+              transform: [{ scale: pinPulse.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.12] }) }],
+              opacity: pinPulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 0.98] }),
+            },
+          ]}
+        />
       </View>
       <Text style={styles.mapHint}>Turn on location services.</Text>
     </View>
@@ -393,24 +699,26 @@ function BottomNav({ compact, bottomInset }: { compact: boolean; bottomInset: nu
   return (
     <View style={[styles.bottomNav, { paddingBottom: bottomInset + 16 }]}>
       {BOTTOM_NAV.map((item) => (
-        <Pressable key={item.id} onPress={noop} style={[styles.bottomNavItem, item.center && styles.bottomNavItemCenter]}>
-          {item.center ? (
-            <View style={styles.centerNavIconWrap}>
-              <Text style={[styles.bottomNavIcon, styles.bottomNavIconActive, compact && styles.bottomNavIconCompact]}>
+        <Pressable key={item.id} onPress={noop} style={({ pressed }) => [styles.bottomNavItem, pressed && styles.bottomNavItemPressed]}>
+          <View style={styles.bottomNavIconSlot}>
+            {item.center ? (
+              <View style={styles.centerNavIconWrap}>
+                <Text style={[styles.bottomNavIcon, styles.bottomNavIconActive, compact && styles.bottomNavIconCompact]}>
+                  {item.icon}
+                </Text>
+              </View>
+            ) : (
+              <Text
+                style={[
+                  styles.bottomNavIcon,
+                  compact && styles.bottomNavIconCompact,
+                  item.active && styles.bottomNavIconActive,
+                ]}
+              >
                 {item.icon}
               </Text>
-            </View>
-          ) : (
-            <Text
-              style={[
-                styles.bottomNavIcon,
-                compact && styles.bottomNavIconCompact,
-                item.active && styles.bottomNavIconActive,
-              ]}
-            >
-              {item.icon}
-            </Text>
-          )}
+            )}
+          </View>
           <Text style={[styles.bottomNavLabel, item.active && styles.bottomNavIconActive]}>{item.label}</Text>
         </Pressable>
       ))}
@@ -418,9 +726,10 @@ function BottomNav({ compact, bottomInset }: { compact: boolean; bottomInset: nu
   );
 }
 
-export default function NativeTatraHomeScreen() {
+export default function IndexRoute() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const mailPulse = useSoftLoop(1500, 0);
   const compact = width < 370;
   const sectionPaddingX = clamp(width * 0.052, 16, 22);
   const sectionPaddingTop = compact ? 18 : 20;
@@ -437,14 +746,6 @@ export default function NativeTatraHomeScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomOffset }]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.statusBar, { paddingHorizontal: sectionPaddingX }]}>
-            <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>20:44</Text>
-            <View style={styles.statusBarRight}>
-              <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>4G+</Text>
-              <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>46%</Text>
-            </View>
-          </View>
-
           <View
             style={[
               styles.topBar,
@@ -455,16 +756,40 @@ export default function NativeTatraHomeScreen() {
               },
             ]}
           >
-            <Pressable onPress={noop} style={styles.mailIcon}>
-              <Text style={styles.mailGlyph}>✉</Text>
-              <View style={styles.mailBadge}>
-                <Text style={styles.mailBadgeText}>5</Text>
-              </View>
-            </Pressable>
+            <View style={styles.topBarSide}>
+              <Pressable onPress={noop} style={styles.mailIcon}>
+                <Text style={styles.mailGlyph}>✉</Text>
+                <Animated.View
+                  style={[
+                    styles.mailBadge,
+                    {
+                      transform: [
+                        {
+                          scale: mailPulse.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.96, 1.08],
+                          }),
+                        },
+                      ],
+                      opacity: mailPulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.9, 1],
+                      }),
+                    },
+                  ]}
+                >
+                  <Text style={styles.mailBadgeText}>5</Text>
+                </Animated.View>
+              </Pressable>
+            </View>
 
-            <TbLogo compact={compact} />
+            <View style={styles.topBarCenter}>
+              <TbLogo compact={compact} />
+            </View>
 
-            <ActionLink label="Customize" compact={compact} />
+            <View style={[styles.topBarSide, styles.topBarSideRight]}>
+              <ActionLink label="Customize" compact={compact} />
+            </View>
           </View>
 
           <View style={[styles.divider, { height: thickDividerHeight }]} />
@@ -483,8 +808,8 @@ export default function NativeTatraHomeScreen() {
               <View style={styles.innerCard}>
                 <Text style={[styles.accountName, compact && styles.accountNameCompact]}>Kolesnikov Volodymyr</Text>
                 <Text style={[styles.iban, compact && styles.metaCompact]}>
-                  <Text style={styles.ibanHighlight}>SK05</Text> <Text style={styles.ibanHighlight}>1100</Text> 0000
-                  00<Text style={styles.ibanHighlight}>29</Text> 3258 4439
+                  <Text style={styles.ibanHighlight}>SK05</Text> <Text style={styles.ibanHighlight}>1100</Text>{' '}
+                  <Text style={styles.ibanTail}>0000 0029 3258 4439</Text>
                 </Text>
 
                 <View style={styles.balanceRow}>
@@ -602,11 +927,8 @@ export default function NativeTatraHomeScreen() {
               actionLabel="See all"
               actionPress={() => router.push('/shared-spaces')}
               compact={compact}
-              showNewBadge
             >
-              {SPOLU_ROOMS.map((room) => (
-                <RoomCard key={room.id} room={room} compact={compact} />
-              ))}
+              <SpoluHeroCard compact={compact} onPress={() => router.push('/shared-spaces')} />
 
               <Pressable
                 onPress={() => router.push('/shared-spaces')}
@@ -634,8 +956,8 @@ export default function NativeTatraHomeScreen() {
           >
             <Section title="Quick pay" actionLabel="List of beneficiaries" compact={compact}>
               <View style={styles.quickPayGrid}>
-                {QUICK_PAY.map((item) => (
-                  <QuickPayItem key={item.id} item={item} compact={compact} />
+                {QUICK_PAY.map((item, index) => (
+                  <QuickPayItem key={item.id} item={item} compact={compact} index={index} />
                 ))}
               </View>
             </Section>
@@ -681,7 +1003,6 @@ export default function NativeTatraHomeScreen() {
               </View>
 
               <View style={[styles.spendingMain, compact && styles.spendingMainCompact]}>
-                <DonutChart />
                 <View style={styles.legendList}>
                   {DONUT_LEGEND.slice(0, 4).map((item) => (
                     <LegendItem key={item.id} label={item.label} color={item.color} share={item.share} />
@@ -856,14 +1177,11 @@ export default function NativeTatraHomeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: COLORS.bgBlack,
-    alignItems: 'center',
+    backgroundColor: COLORS.bgPage,
   },
   phone: {
     flex: 1,
     width: '100%',
-    maxWidth: 390,
-    alignSelf: 'center',
     backgroundColor: COLORS.bgPage,
   },
   scroll: {
@@ -872,30 +1190,22 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 110,
   },
-  statusBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 14,
-    paddingBottom: 4,
-  },
-  statusBarText: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  statusBarTextCompact: {
-    fontSize: 14,
-  },
-  statusBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  topBarSide: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  topBarSideRight: {
+    alignItems: 'flex-end',
+  },
+  topBarCenter: {
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mailIcon: {
     width: 26,
@@ -927,19 +1237,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tbLogo: {
-    width: 38,
-    height: 22,
-    flexDirection: 'row',
-    gap: 3,
-    transform: [{ skewX: '-20deg' }],
+    width: 94,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tbLogoCompact: {
-    width: 34,
-    height: 20,
+    width: 84,
+    height: 40,
   },
-  tbLogoBar: {
-    flex: 1,
-    backgroundColor: COLORS.textPrimary,
+  tbLogoImage: {
+    width: '100%',
+    height: '100%',
   },
   actionLinkWrap: {
     paddingVertical: 2,
@@ -1015,6 +1324,9 @@ const styles = StyleSheet.create({
   },
   ibanHighlight: {
     color: '#D8D8DC',
+  },
+  ibanTail: {
+    color: COLORS.textIban,
   },
   metaCompact: {
     fontSize: 13,
@@ -1267,6 +1579,198 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  spoluHeroCard: {
+    minHeight: 278,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#24262B',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  spoluHeroCardCompact: {
+    minHeight: 264,
+  },
+  spoluHeroCardPressed: {
+    opacity: 0.94,
+  },
+  spoluHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  spoluHeroImageTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(14, 16, 22, 0.58)',
+  },
+  spoluHeroContent: {
+    flex: 1,
+    paddingTop: 18,
+    paddingRight: 18,
+    paddingBottom: 16,
+    paddingLeft: 18,
+    backgroundColor: 'rgba(19, 21, 27, 0.48)',
+  },
+  spoluHeroHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+  },
+  spoluHeroTitleWrap: {
+    flex: 1,
+    gap: 8,
+  },
+  spoluHeroTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: '700',
+  },
+  spoluHeroTitleCompact: {
+    fontSize: 24,
+    lineHeight: 27,
+  },
+  spoluHeroSubtitle: {
+    maxWidth: 220,
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  spoluHeroSubtitleCompact: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  spoluHeroBadge: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(51,144,221,0.52)',
+    backgroundColor: 'rgba(24, 32, 44, 0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  spoluHeroBadgeText: {
+    color: '#DCEEFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  spoluHeroStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  spoluHeroStat: {
+    flex: 1,
+    paddingLeft: 12,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.12)',
+  },
+  spoluHeroStatValue: {
+    color: COLORS.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  spoluHeroStatLabel: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  spoluHeroBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  spoluHeroBalanceCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  spoluHeroBalanceLabel: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  spoluHeroBalanceValue: {
+    color: COLORS.textPrimary,
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: '700',
+  },
+  spoluHeroBalanceValueCompact: {
+    fontSize: 22,
+    lineHeight: 26,
+  },
+  spoluHeroButton: {
+    minWidth: 116,
+    height: 48,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: COLORS.accentBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.accentBlue,
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  spoluHeroButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  spoluHeroFooter: {
+    marginTop: 'auto',
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    gap: 12,
+  },
+  spoluHeroPeopleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  spoluHeroFooterSummary: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 13,
+  },
+  spoluHeroMiniList: {
+    gap: 8,
+  },
+  spoluHeroMiniRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  spoluHeroMiniName: {
+    width: 86,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  spoluHeroMiniTrack: {
+    flex: 1,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  spoluHeroMiniFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  spoluHeroMiniAmount: {
+    width: 84,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
   roomCard: {
     backgroundColor: COLORS.bgCard,
     borderRadius: 10,
@@ -1394,11 +1898,11 @@ const styles = StyleSheet.create({
   addRoomButton: {
     width: '100%',
     borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.13)',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
+    borderColor: 'rgba(51,144,221,0.18)',
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -1439,13 +1943,29 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'center',
   },
+  quickPayItemPressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.985 }],
+  },
+  quickPayAvatarWrap: {
+    width: 52,
+    height: 52,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickPayAvatarAura: {
+    position: 'absolute',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
   quickPayAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
   quickPayAvatarText: {
     color: COLORS.textPrimary,
@@ -1514,91 +2034,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   spendingMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    width: '100%',
   },
   spendingMainCompact: {
-    gap: 12,
-  },
-  donutWrap: {
-    width: 156,
-    height: 156,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  donutBase: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 22,
-    borderColor: COLORS.donutGrey,
-    opacity: 0.34,
-  },
-  donutArc: {
-    position: 'absolute',
-    width: 66,
-    height: 16,
-    borderRadius: 8,
-  },
-  donutArcGrey: {
-    backgroundColor: COLORS.donutGrey,
-    transform: [{ translateX: 22 }, { translateY: 0 }],
-  },
-  donutArcOrange: {
-    backgroundColor: COLORS.orange,
-    transform: [{ translateX: -36 }, { translateY: 26 }, { rotate: '-18deg' }],
-  },
-  donutArcYellow: {
-    backgroundColor: COLORS.yellow,
-    transform: [{ translateX: -42 }, { translateY: -8 }, { rotate: '-64deg' }],
-  },
-  donutArcBlue: {
-    backgroundColor: COLORS.donutBlue,
-    transform: [{ translateX: -4 }, { translateY: -42 }, { rotate: '36deg' }],
-  },
-  donutArcCyan: {
-    backgroundColor: COLORS.donutCyan,
-    transform: [{ translateX: 26 }, { translateY: -26 }, { rotate: '72deg' }],
-  },
-  donutHole: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: COLORS.bgPage,
-    zIndex: 2,
-  },
-  donutShareLabel: {
-    position: 'absolute',
-    color: COLORS.textPrimary,
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  share60: {
-    right: 22,
-    top: 72,
-    fontSize: 11,
-  },
-  share17: {
-    left: 18,
-    bottom: 34,
-  },
-  share9Left: {
-    left: 16,
-    top: 78,
-  },
-  share9Top: {
-    left: 54,
-    top: 20,
-  },
-  share5: {
-    right: 44,
-    top: 18,
   },
   legendList: {
-    flex: 1,
+    width: '100%',
     gap: 12,
   },
   legendItem: {
@@ -1885,11 +2326,18 @@ const styles = StyleSheet.create({
   bottomNavItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingVertical: 4,
+    justifyContent: 'flex-end',
   },
-  bottomNavItemCenter: {
-    marginTop: -14,
+  bottomNavItemPressed: {
+    opacity: 0.82,
+  },
+  bottomNavIconSlot: {
+    width: '100%',
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centerNavIconWrap: {
     width: 44,
@@ -1916,6 +2364,7 @@ const styles = StyleSheet.create({
   bottomNavLabel: {
     color: COLORS.textSecondary,
     fontSize: 10.5,
+    lineHeight: 12,
     textAlign: 'center',
   },
 });

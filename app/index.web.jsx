@@ -40,7 +40,7 @@ const SHARED_HERO_BACKGROUNDS = [
 function Logo() {
   return (
     <div className="tb-logo" aria-label="Tatra banka demo logo">
-      <img src="/mock-shell/images.png" alt="" />
+      <img src="/brand/tatra-logo.png" alt="" />
     </div>
   );
 }

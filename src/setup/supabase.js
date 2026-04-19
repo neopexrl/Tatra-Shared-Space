@@ -241,21 +241,29 @@ export async function addTransaction(fromIban, toIban, amount) {
 /* ─── composite: send money to room ─── */
 export async function sendToRoom(userIban, roomIban, amount) {
   const client = requireSupabase();
-  // insert transaction
-  const tx = await addTransaction(userIban, roomIban, amount);
+  const normalizedAmount = Number(amount || 0);
 
-  // decrease user balance
-  const userBal = await getUserBalance(userIban);
+  if (normalizedAmount <= 0) {
+    throw new Error('Invalid transfer amount.');
+  }
+
+  const userBal = Number(await getUserBalance(userIban) || 0);
+  if (userBal < normalizedAmount) {
+    throw new Error('Insufficient funds in user account.');
+  }
+
+  const roomBal = Number(await getRoomBalance(roomIban) || 0);
+
+  const tx = await addTransaction(userIban, roomIban, normalizedAmount);
+
   await client
     .from('users')
-    .update({ balance: userBal - amount })
+    .update({ balance: userBal - normalizedAmount })
     .eq('user_iban', userIban);
 
-  // increase room balance
-  const roomBal = await getRoomBalance(roomIban);
   await client
     .from('rooms')
-    .update({ balance: roomBal + amount })
+    .update({ balance: roomBal + normalizedAmount })
     .eq('room_iban', roomIban);
 
   return tx;
@@ -264,18 +272,29 @@ export async function sendToRoom(userIban, roomIban, amount) {
 /* ─── composite: send from room to user ─── */
 export async function sendFromRoom(roomIban, userIban, amount) {
   const client = requireSupabase();
-  const tx = await addTransaction(roomIban, userIban, amount);
+  const normalizedAmount = Number(amount || 0);
 
-  const roomBal = await getRoomBalance(roomIban);
+  if (normalizedAmount <= 0) {
+    throw new Error('Invalid transfer amount.');
+  }
+
+  const roomBal = Number(await getRoomBalance(roomIban) || 0);
+  if (roomBal < normalizedAmount) {
+    throw new Error('Insufficient funds in room balance.');
+  }
+
+  const userBal = Number(await getUserBalance(userIban) || 0);
+
+  const tx = await addTransaction(roomIban, userIban, normalizedAmount);
+
   await client
     .from('rooms')
-    .update({ balance: roomBal - amount })
+    .update({ balance: roomBal - normalizedAmount })
     .eq('room_iban', roomIban);
 
-  const userBal = await getUserBalance(userIban);
   await client
     .from('users')
-    .update({ balance: userBal + amount })
+    .update({ balance: userBal + normalizedAmount })
     .eq('user_iban', userIban);
 
   return tx;
