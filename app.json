@@ -6,7 +6,9 @@
     "orientation": "default",
     "scheme": "tatrashared",
     "userInterfaceStyle": "light",
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": false
     },
@@ -15,6 +17,12 @@
     },
     "ios": {
       "bundleIdentifier": "com.hackathon.tatrasharedspaces"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5d87242e-553a-442d-ac98-408f4512dd3f"
+      }
     }
   }
 }
