@@ -4,136 +4,165 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const COLORS = {
-  divider: '#000000',
-  page: '#1D1E23',
-  card: '#28292E',
+  bgPage: '#1D1E23',
+  bgBlack: '#000000',
+  bgCard: '#28292E',
+  bgCardPressed: '#32343A',
   textPrimary: '#FFFFFF',
   textSecondary: '#A5A5A9',
-  textTertiary: '#5F5F69',
+  textTertiary: '#6C6C70',
+  textIban: '#6C6C70',
   accentBlue: '#3390DD',
-  accentBlueAlt: '#4A9EE0',
-  success: '#2EB872',
-  successChart: '#00764E',
-  danger: '#E74C3C',
-  warning: '#F5A623',
+  qpBlue: '#3E76CB',
+  qpBurgundy: '#96194A',
+  qpGreen: '#2A8947',
+  success: '#39C69B',
+  successDeep: '#136650',
+  chartGreen: '#00764E',
+  danger: '#C36259',
   purple: '#5B4ACA',
-  dividerLine: 'rgba(255,255,255,0.08)',
+  orange: '#C94D17',
+  yellow: '#C9B019',
+  donutGrey: '#5A6B7A',
+  donutBlue: '#025AA1',
+  donutCyan: '#1E90D4',
+  dividerLine: 'rgba(255, 255, 255, 0.08)',
 };
 
-const rooms = [
+const noop = () => {};
+
+const SPOLU_ROOMS = [
   {
     id: 'praha-weekend',
     name: 'Praha weekend',
     subtitle: 'Trip · 3 members · 5 expenses',
-    balance: '247,50',
     status: 'In balance',
-    statusTone: 'ok' as const,
-    accent: COLORS.purple,
+    tone: 'ok' as const,
+    balance: '247,50',
     footer: 'You owe 0,00 EUR',
+    accent: COLORS.purple,
     avatars: [
       { label: 'V', color: COLORS.purple },
       { label: 'K', color: COLORS.danger },
-      { label: 'P', color: COLORS.success },
+      { label: 'P', color: COLORS.qpGreen },
     ],
   },
   {
     id: 'flatshare-april',
     name: 'Flatshare April',
     subtitle: 'Monthly · 2 members · Rent + utilities',
-    balance: '420,00',
     status: 'Owe 45,00 EUR',
-    statusTone: 'owe' as const,
-    accent: COLORS.warning,
+    tone: 'owe' as const,
+    balance: '420,00',
     footer: 'Settle now ›',
+    accent: COLORS.accentBlue,
     avatars: [
       { label: 'V', color: COLORS.purple },
-      { label: 'J', color: COLORS.warning },
+      { label: 'J', color: COLORS.qpBurgundy },
     ],
   },
 ];
 
-const cardActions = [
-  { icon: '◎', label: 'E-commerce' },
-  { icon: '★', label: 'Card benefits' },
+const QUICK_PAY = [
+  { id: 'kv-1', label: 'KV', name: 'Kolesnikov Volodymyr', color: COLORS.qpBlue },
+  { id: 'kv-2', label: 'KV', name: 'Kolesnikov Volodymyr', color: COLORS.qpBlue },
+  { id: 'ko', label: 'KO', name: 'Kolomiets', color: COLORS.qpBurgundy },
+  { id: 'mf', label: 'MF', name: 'Majiteľ Fer...', color: COLORS.qpGreen },
 ];
 
-const bottomNav = [
-  { icon: '⌂', label: 'Home', active: true },
-  { icon: '⇄', label: 'Transactions' },
-  { icon: '↑', label: 'Payment' },
-  { icon: '◉', label: 'Offers' },
-  { icon: '≡', label: 'More' },
+const EXCHANGE_RATES = [
+  { id: 'czk', label: 'CZ', country: 'Czech Republic', code: 'CZK', value: '24,2970' },
+  { id: 'gbp', label: 'GB', country: 'Great Britain', code: 'GBP', value: '0,8716' },
+  { id: 'usd', label: 'US', country: 'USA', code: 'USD', value: '1,1835' },
+];
+
+const CARD_ACTIONS = [
+  { id: 'e-commerce', icon: '◎', label: 'E-commerce' },
+  { id: 'benefits', icon: '★', label: 'Card benefits' },
+];
+
+const DONUT_LEGEND = [
+  { id: 'uncategorized', color: COLORS.donutGrey, label: 'Unclassified', share: '60%' },
+  { id: 'savings', color: COLORS.orange, label: 'Savings and inve…', share: '17%' },
+  { id: 'supermarket', color: COLORS.yellow, label: 'Supermarket', share: '9%' },
+  { id: 'leisure', color: COLORS.donutBlue, label: 'Leisure time', share: '9%' },
+  { id: 'other', color: COLORS.donutCyan, label: 'Other', share: '5%' },
+];
+
+const BOTTOM_NAV = [
+  { id: 'home', icon: '⌂', label: 'Home', active: true },
+  { id: 'transactions', icon: '⇄', label: 'Transactions' },
+  { id: 'payment', icon: '↑', label: 'Payment', center: true },
+  { id: 'offers', icon: '◎', label: 'Offers' },
+  { id: 'more', icon: '≡', label: 'More' },
 ];
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function TbLogo({ compact }: { compact: boolean }) {
-  return (
-    <View style={[styles.logo, compact && styles.logoCompact]} accessibilityLabel="Tatra banka logo">
-      <View style={styles.logoBar} />
-      <View style={styles.logoBar} />
-      <View style={styles.logoBar} />
-    </View>
-  );
-}
-
-function SectionDivider() {
-  return <View style={styles.sectionDivider} />;
-}
-
 function ActionLink({
   label,
-  onPress,
   compact,
+  onPress = noop,
 }: {
   label: string;
-  onPress?: () => void;
   compact?: boolean;
+  onPress?: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.actionLinkWrap}>
+    <Pressable onPress={onPress} hitSlop={8} style={styles.actionLinkWrap}>
       <Text style={[styles.actionLink, compact && styles.actionLinkCompact]}>{label}</Text>
     </Pressable>
   );
 }
 
-function SectionHeader({
-  title,
-  actionLabel,
-  onActionPress,
-  compact,
-}: {
-  title: string;
-  actionLabel?: string;
-  onActionPress?: () => void;
-  compact?: boolean;
-}) {
+function TbLogo({ compact }: { compact: boolean }) {
   return (
-    <View style={styles.sectionHeader}>
-      <Text style={[styles.sectionTitle, compact && styles.sectionTitleCompact]}>{title}</Text>
-      {actionLabel ? <ActionLink label={actionLabel} onPress={onActionPress} compact={compact} /> : null}
+    <View style={[styles.tbLogo, compact && styles.tbLogoCompact]} accessibilityLabel="Tatra banka logo">
+      <View style={styles.tbLogoBar} />
+      <View style={styles.tbLogoBar} />
+      <View style={styles.tbLogoBar} />
     </View>
   );
 }
 
-function Sparkline({ compact }: { compact: boolean }) {
-  const bars = [15, 26, 20, 30, 19, 37, 28, 39];
+function Section({
+  title,
+  actionLabel,
+  actionPress = noop,
+  compact,
+  children,
+  showNewBadge,
+}: {
+  title: string;
+  actionLabel?: string;
+  actionPress?: () => void;
+  compact: boolean;
+  children: React.ReactNode;
+  showNewBadge?: boolean;
+}) {
   return (
-    <View style={[styles.sparkline, compact && styles.sparklineCompact]}>
-      {bars.map((height, index) => (
-        <View key={index} style={styles.sparklineBarWrap}>
-          <View style={[styles.sparklineBar, { height: compact ? height - 3 : height }]} />
+    <View>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionTitleRow}>
+          <Text style={[styles.sectionTitle, compact && styles.sectionTitleCompact]}>{title}</Text>
+          {showNewBadge ? (
+            <View style={styles.newBadge}>
+              <Text style={styles.newBadgeText}>NEW</Text>
+            </View>
+          ) : null}
         </View>
-      ))}
+        {actionLabel ? <ActionLink label={actionLabel} compact={compact} onPress={actionPress} /> : null}
+      </View>
+      {children}
     </View>
   );
 }
@@ -146,20 +175,8 @@ function StatusPill({
   tone: 'ok' | 'owe';
 }) {
   return (
-    <View
-      style={[
-        styles.statusPill,
-        tone === 'ok' ? styles.statusPillOk : styles.statusPillOwe,
-      ]}
-    >
-      <Text
-        style={[
-          styles.statusPillText,
-          tone === 'ok' ? styles.statusPillTextOk : styles.statusPillTextOwe,
-        ]}
-      >
-        {label}
-      </Text>
+    <View style={[styles.pill, tone === 'ok' ? styles.pillOk : styles.pillOwe]}>
+      <Text style={[styles.pillText, tone === 'ok' ? styles.pillTextOk : styles.pillTextOwe]}>{label}</Text>
     </View>
   );
 }
@@ -174,13 +191,7 @@ function Avatar({
   first?: boolean;
 }) {
   return (
-    <View
-      style={[
-        styles.avatar,
-        { backgroundColor: color },
-        !first && styles.avatarOverlap,
-      ]}
-    >
+    <View style={[styles.avatar, { backgroundColor: color }, !first && styles.avatarOverlap]}>
       <Text style={styles.avatarText}>{label}</Text>
     </View>
   );
@@ -190,38 +201,38 @@ function RoomCard({
   room,
   compact,
 }: {
-  room: (typeof rooms)[number];
+  room: (typeof SPOLU_ROOMS)[number];
   compact: boolean;
 }) {
   return (
     <Pressable
+      onPress={() => router.push('/shared-spaces')}
       style={({ pressed }) => [
         styles.roomCard,
         compact && styles.roomCardCompact,
         pressed && styles.roomCardPressed,
       ]}
-      onPress={() => router.push('/shared-spaces')}
     >
-      <View style={[styles.accentStrip, { backgroundColor: room.accent }]} />
+      <View style={[styles.roomAccent, { backgroundColor: room.accent }]} />
 
       <View style={styles.roomTop}>
-        <View style={styles.roomTopLeft}>
+        <View style={styles.roomTextBlock}>
           <Text style={[styles.roomName, compact && styles.roomNameCompact]}>{room.name}</Text>
-          <Text style={[styles.roomSub, compact && styles.roomSubCompact]}>{room.subtitle}</Text>
-          <StatusPill label={room.status} tone={room.statusTone} />
+          <Text style={[styles.roomSubtitle, compact && styles.roomSubtitleCompact]}>{room.subtitle}</Text>
+          <StatusPill label={room.status} tone={room.tone} />
         </View>
 
-        <View style={[styles.roomBalance, compact && styles.roomBalanceCompact]}>
-          <Text style={[styles.roomBalanceAmount, compact && styles.roomBalanceAmountCompact]}>
+        <View style={styles.roomBalanceBlock}>
+          <Text style={[styles.roomBalance, compact && styles.roomBalanceCompact]}>
             {room.balance}
-            <Text style={styles.currencyTiny}> EUR</Text>
+            <Text style={styles.inlineCurrency}> EUR</Text>
           </Text>
-          <Text style={[styles.roomSubMuted, compact && styles.roomSubCompact]}>Pool balance</Text>
+          <Text style={[styles.roomBalanceLabel, compact && styles.metaCompact]}>Pool balance</Text>
         </View>
       </View>
 
-      <View style={styles.membersRow}>
-        <View style={styles.avatars}>
+      <View style={styles.roomMembersRow}>
+        <View style={styles.avatarRow}>
           {room.avatars.map((avatar, index) => (
             <Avatar
               key={`${room.id}-${avatar.label}`}
@@ -231,29 +242,176 @@ function RoomCard({
             />
           ))}
         </View>
-        <Text style={styles.membersCount}>{room.footer}</Text>
+        <Text style={[styles.roomFooter, compact && styles.metaCompact]}>{room.footer}</Text>
       </View>
     </Pressable>
   );
 }
 
-function BottomNavBar({
+function Sparkline({ compact }: { compact: boolean }) {
+  const heights = [16, 28, 22, 34, 25, 40, 29, 42];
+
+  return (
+    <View style={[styles.sparkline, compact && styles.sparklineCompact]}>
+      {heights.map((height, index) => (
+        <View key={index} style={styles.sparklineTrack}>
+          <View style={[styles.sparklineBar, { height: compact ? height - 3 : height }]} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function CardVisual({ compact }: { compact: boolean }) {
+  return (
+    <View style={[styles.cardVisual, compact && styles.cardVisualCompact]}>
+      <View style={styles.cardGlowOne} />
+      <View style={styles.cardGlowTwo} />
+      <Text style={styles.cardVisa}>VISA</Text>
+      <View style={styles.cardChip} />
+      <View style={styles.cardStripe} />
+    </View>
+  );
+}
+
+function QuickPayItem({
+  item,
   compact,
-  bottomInset,
 }: {
+  item: (typeof QUICK_PAY)[number];
   compact: boolean;
-  bottomInset: number;
 }) {
   return (
-    <View style={[styles.bottomNav, { paddingBottom: bottomInset + (compact ? 12 : 18) }]}>
-      {bottomNav.map((item) => (
-        <Pressable key={item.label} style={styles.navItem}>
-          <Text style={[styles.navIcon, compact && styles.navIconCompact, item.active && styles.navItemActive]}>
-            {item.icon}
-          </Text>
-          <Text style={[styles.navLabel, compact && styles.navLabelCompact, item.active && styles.navItemActive]}>
-            {item.label}
-          </Text>
+    <Pressable onPress={noop} style={styles.quickPayItem}>
+      <View style={[styles.quickPayAvatar, { backgroundColor: item.color }]}>
+        <Text style={styles.quickPayAvatarText}>{item.label}</Text>
+      </View>
+      <Text numberOfLines={2} style={[styles.quickPayName, compact && styles.quickPayNameCompact]}>
+        {item.name}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DonutChart() {
+  return (
+    <View style={styles.donutWrap}>
+      <View style={styles.donutBase} />
+      <View style={[styles.donutArc, styles.donutArcGrey]} />
+      <View style={[styles.donutArc, styles.donutArcOrange]} />
+      <View style={[styles.donutArc, styles.donutArcYellow]} />
+      <View style={[styles.donutArc, styles.donutArcBlue]} />
+      <View style={[styles.donutArc, styles.donutArcCyan]} />
+      <View style={styles.donutHole} />
+      <Text style={[styles.donutShareLabel, styles.share60]}>60%</Text>
+      <Text style={[styles.donutShareLabel, styles.share17]}>17%</Text>
+      <Text style={[styles.donutShareLabel, styles.share9Left]}>9%</Text>
+      <Text style={[styles.donutShareLabel, styles.share9Top]}>9%</Text>
+      <Text style={[styles.donutShareLabel, styles.share5]}>5%</Text>
+    </View>
+  );
+}
+
+function LegendItem({
+  label,
+  color,
+  share,
+}: {
+  label: string;
+  color: string;
+  share: string;
+}) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: `${color}33` }]}>
+        <View style={[styles.legendDotInner, { backgroundColor: color }]} />
+      </View>
+      <Text numberOfLines={1} style={styles.legendText}>
+        {label}
+      </Text>
+      <Text style={styles.legendShare}>{share}</Text>
+    </View>
+  );
+}
+
+function PhotoStack() {
+  return (
+    <View style={styles.photoStack}>
+      <View style={[styles.photoCard, styles.photoOne]} />
+      <View style={[styles.photoCard, styles.photoTwo]} />
+      <View style={[styles.photoCard, styles.photoThree]} />
+    </View>
+  );
+}
+
+function MapPlaceholder() {
+  return (
+    <View style={styles.mapPlaceholder}>
+      <View style={styles.mapCanvas}>
+        <View style={[styles.mapStroke, styles.mapStrokeOne]} />
+        <View style={[styles.mapStroke, styles.mapStrokeTwo]} />
+        <View style={[styles.mapPin, styles.mapPinOne]} />
+        <View style={[styles.mapPin, styles.mapPinTwo]} />
+        <View style={[styles.mapPin, styles.mapPinThree]} />
+        <View style={[styles.mapPin, styles.mapPinFour]} />
+        <View style={[styles.mapPin, styles.mapPinFive]} />
+      </View>
+      <Text style={styles.mapHint}>Turn on location services.</Text>
+    </View>
+  );
+}
+
+function RateFlag({ label }: { label: string }) {
+  return (
+    <View style={styles.rateFlag}>
+      <Text style={styles.rateFlagText}>{label}</Text>
+    </View>
+  );
+}
+
+function RateRow({
+  rate,
+  compact,
+}: {
+  rate: (typeof EXCHANGE_RATES)[number];
+  compact: boolean;
+}) {
+  return (
+    <View style={styles.rateRow}>
+      <RateFlag label={rate.label} />
+      <Text numberOfLines={1} style={[styles.rateCountry, compact && styles.rateCountryCompact]}>
+        {rate.country}
+      </Text>
+      <Text style={styles.rateCode}>{rate.code}</Text>
+      <Text style={styles.rateValue}>{rate.value}</Text>
+      <Text style={styles.rateTrend}>—</Text>
+    </View>
+  );
+}
+
+function BottomNav({ compact, bottomInset }: { compact: boolean; bottomInset: number }) {
+  return (
+    <View style={[styles.bottomNav, { paddingBottom: bottomInset + 16 }]}>
+      {BOTTOM_NAV.map((item) => (
+        <Pressable key={item.id} onPress={noop} style={[styles.bottomNavItem, item.center && styles.bottomNavItemCenter]}>
+          {item.center ? (
+            <View style={styles.centerNavIconWrap}>
+              <Text style={[styles.bottomNavIcon, styles.bottomNavIconActive, compact && styles.bottomNavIconCompact]}>
+                {item.icon}
+              </Text>
+            </View>
+          ) : (
+            <Text
+              style={[
+                styles.bottomNavIcon,
+                compact && styles.bottomNavIconCompact,
+                item.active && styles.bottomNavIconActive,
+              ]}
+            >
+              {item.icon}
+            </Text>
+          )}
+          <Text style={[styles.bottomNavLabel, item.active && styles.bottomNavIconActive]}>{item.label}</Text>
         </Pressable>
       ))}
     </View>
@@ -268,39 +426,48 @@ export default function NativeTatraHomeScreen() {
   const sectionPaddingTop = compact ? 18 : 20;
   const sectionPaddingBottom = compact ? 20 : 24;
   const dividerHeight = compact ? 9 : 11;
-  const topBarPaddingTop = compact ? 12 : 16;
-  const topBarPaddingBottom = compact ? 14 : 18;
-  const scrollBottom = 100 + insets.bottom + (compact ? 4 : 0);
+  const thickDividerHeight = compact ? 13 : 15;
+  const bottomOffset = 96 + insets.bottom;
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.root}>
+    <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.root}>
       <View style={styles.phone}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollBottom }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomOffset }]}
           showsVerticalScrollIndicator={false}
         >
+          <View style={[styles.statusBar, { paddingHorizontal: sectionPaddingX }]}>
+            <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>20:44</Text>
+            <View style={styles.statusBarRight}>
+              <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>4G+</Text>
+              <Text style={[styles.statusBarText, compact && styles.statusBarTextCompact]}>46%</Text>
+            </View>
+          </View>
+
           <View
             style={[
               styles.topBar,
               {
                 paddingHorizontal: sectionPaddingX,
-                paddingTop: topBarPaddingTop,
-                paddingBottom: topBarPaddingBottom,
+                paddingTop: compact ? 14 : 16,
+                paddingBottom: compact ? 16 : 18,
               },
             ]}
           >
-            <View style={styles.mailWrap}>
-              <Text style={styles.mailIcon}>✉</Text>
+            <Pressable onPress={noop} style={styles.mailIcon}>
+              <Text style={styles.mailGlyph}>✉</Text>
               <View style={styles.mailBadge}>
                 <Text style={styles.mailBadgeText}>5</Text>
               </View>
-            </View>
+            </Pressable>
+
             <TbLogo compact={compact} />
+
             <ActionLink label="Customize" compact={compact} />
           </View>
 
-          <View style={[styles.sectionDivider, { height: dividerHeight }]} />
+          <View style={[styles.divider, { height: thickDividerHeight }]} />
 
           <View
             style={[
@@ -312,28 +479,113 @@ export default function NativeTatraHomeScreen() {
               },
             ]}
           >
-            <SectionHeader title="Accounts" compact={compact} />
-            <View style={[styles.innerCard, compact && styles.innerCardCompact]}>
-              <Text style={styles.accountName}>Kolesnikov Volodymyr</Text>
-              <Text style={styles.iban}>
-                <Text style={styles.ibanEm}>SK05 1100</Text> 0000 00
-                <Text style={styles.ibanEm}>29</Text> 3258 4439
-              </Text>
+            <Section title="Accounts" compact={compact}>
+              <View style={styles.innerCard}>
+                <Text style={[styles.accountName, compact && styles.accountNameCompact]}>Kolesnikov Volodymyr</Text>
+                <Text style={[styles.iban, compact && styles.metaCompact]}>
+                  <Text style={styles.ibanHighlight}>SK05</Text> <Text style={styles.ibanHighlight}>1100</Text> 0000
+                  00<Text style={styles.ibanHighlight}>29</Text> 3258 4439
+                </Text>
 
-              <View style={styles.balanceRow}>
+                <View style={styles.balanceRow}>
+                  <View>
+                    <Text style={[styles.balanceLabel, compact && styles.metaCompact]}>Account balance</Text>
+                    <Text style={[styles.balanceAmount, compact && styles.balanceAmountCompact]}>
+                      3,71
+                      <Text style={styles.inlineCurrency}> EUR</Text>
+                    </Text>
+                  </View>
+                  <Sparkline compact={compact} />
+                </View>
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Cards" actionLabel="List of cards" compact={compact}>
+              <CardVisual compact={compact} />
+
+              <View style={styles.cardDots}>
+                <View style={[styles.cardDot, styles.cardDotActive]} />
+                <View style={styles.cardDot} />
+              </View>
+
+              <View style={styles.cardInfoRow}>
                 <View>
-                  <Text style={styles.balanceLabel}>Account balance</Text>
-                  <Text style={styles.balanceAmount}>
+                  <Text style={[styles.cardHolder, compact && styles.accountNameCompact]}>Volodymyr Kolesnikov</Text>
+                  <Text style={[styles.cardNumber, compact && styles.metaCompact]}>4405 77** **** 2183</Text>
+                </View>
+                <View style={styles.cardBalanceRight}>
+                  <Text style={[styles.cardBalanceAmount, compact && styles.cardBalanceAmountCompact]}>
                     3,71
-                    <Text style={styles.currencyLabel}> EUR</Text>
+                    <Text style={styles.inlineCurrency}> EUR</Text>
+                  </Text>
+                  <Text style={[styles.cardBalanceSub, compact && styles.metaCompact]}>Disposable balance</Text>
+                </View>
+              </View>
+
+              <View style={styles.cardActionRow}>
+                {CARD_ACTIONS.map((action) => (
+                  <Pressable key={action.id} onPress={noop} style={styles.cardAction}>
+                    <Text style={styles.cardActionIcon}>{action.icon}</Text>
+                    <Text style={[styles.cardActionText, compact && styles.metaCompact]}>{action.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Savings" actionLabel="List of savings" compact={compact}>
+              <View style={styles.savingsCard}>
+                <View style={styles.savingsAccent} />
+                <View style={styles.savingsTop}>
+                  <View>
+                    <Text style={[styles.accountName, compact && styles.accountNameCompact]}>Kolesnikov Volodymyr</Text>
+                    <Text style={[styles.savingsSub, compact && styles.metaCompact]}>
+                      to account: <Text style={styles.savingsSubValue}>Kolesnikov Volodymyr</Text>
+                    </Text>
+                  </View>
+                  <Text style={[styles.savingsAmount, compact && styles.balanceAmountCompact]}>
+                    270,00
+                    <Text style={styles.inlineCurrency}> EUR</Text>
                   </Text>
                 </View>
-                <Sparkline compact={compact} />
+                <View style={styles.savingsHint}>
+                  <View style={styles.infoIcon}>
+                    <Text style={styles.infoIconText}>i</Text>
+                  </View>
+                  <Text style={[styles.savingsHintText, compact && styles.metaCompact]}>
+                    For successful saving we recommend to create a goal.
+                  </Text>
+                </View>
               </View>
-            </View>
+            </Section>
           </View>
 
-          <View style={[styles.sectionDivider, { height: dividerHeight }]} />
+          <View style={[styles.divider, { height: dividerHeight }]} />
 
           <View
             style={[
@@ -345,75 +597,30 @@ export default function NativeTatraHomeScreen() {
               },
             ]}
           >
-            <SectionHeader
+            <Section
               title="Spolu"
               actionLabel="See all"
-              onActionPress={() => router.push('/shared-spaces')}
+              actionPress={() => router.push('/shared-spaces')}
               compact={compact}
-            />
-
-            {rooms.map((room) => (
-              <RoomCard key={room.id} room={room} compact={compact} />
-            ))}
-
-            <Pressable style={[styles.addRoomButton, compact && styles.addRoomButtonCompact]}>
-              <View style={styles.addIconCircle}>
-                <Text style={styles.addIconText}>+</Text>
-              </View>
-              <Text style={[styles.addRoomText, compact && styles.addRoomTextCompact]}>Create new Spolu room</Text>
-            </Pressable>
-          </View>
-
-          <View style={[styles.sectionDivider, { height: dividerHeight }]} />
-
-          <View
-            style={[
-              styles.section,
-              {
-                paddingHorizontal: sectionPaddingX,
-                paddingTop: sectionPaddingTop,
-                paddingBottom: sectionPaddingBottom,
-              },
-            ]}
-          >
-            <SectionHeader title="Cards" actionLabel="List of cards" compact={compact} />
-
-            <View style={[styles.cardVisual, compact && styles.cardVisualCompact]}>
-              <View style={styles.cardGlow} />
-              <Text style={styles.cardVisa}>VISA</Text>
-              <View style={styles.cardChip} />
-            </View>
-
-            <View style={styles.cardDots}>
-              <View style={[styles.cardDot, styles.cardDotActive]} />
-              <View style={styles.cardDot} />
-            </View>
-
-            <View style={styles.cardBalanceRow}>
-              <View>
-                <Text style={styles.cardHolder}>Volodymyr Kolesnikov</Text>
-                <Text style={styles.cardNumber}>4405 77** **** 2183</Text>
-              </View>
-              <View style={styles.cardBalanceRight}>
-                <Text style={styles.cardBalanceAmount}>
-                  3,71
-                  <Text style={styles.currencyTiny}> EUR</Text>
-                </Text>
-                <Text style={styles.cardBalanceSub}>Disposable balance</Text>
-              </View>
-            </View>
-
-            <View style={styles.cardActions}>
-              {cardActions.map((action) => (
-                <Pressable key={action.label} style={styles.cardAction}>
-                  <Text style={styles.cardActionIcon}>{action.icon}</Text>
-                  <Text style={styles.cardActionText}>{action.label}</Text>
-                </Pressable>
+              showNewBadge
+            >
+              {SPOLU_ROOMS.map((room) => (
+                <RoomCard key={room.id} room={room} compact={compact} />
               ))}
-            </View>
+
+              <Pressable
+                onPress={() => router.push('/shared-spaces')}
+                style={({ pressed }) => [styles.addRoomButton, pressed && styles.addRoomButtonPressed]}
+              >
+                <View style={styles.addRoomIcon}>
+                  <Text style={styles.addRoomIconText}>+</Text>
+                </View>
+                <Text style={[styles.addRoomLabel, compact && styles.addRoomLabelCompact]}>Create new Spolu room</Text>
+              </Pressable>
+            </Section>
           </View>
 
-          <View style={[styles.sectionDivider, { height: dividerHeight }]} />
+          <View style={[styles.divider, { height: dividerHeight }]} />
 
           <View
             style={[
@@ -425,25 +632,222 @@ export default function NativeTatraHomeScreen() {
               },
             ]}
           >
-            <SectionHeader title="Savings" actionLabel="List of savings" compact={compact} />
+            <Section title="Quick pay" actionLabel="List of beneficiaries" compact={compact}>
+              <View style={styles.quickPayGrid}>
+                {QUICK_PAY.map((item) => (
+                  <QuickPayItem key={item.id} item={item} compact={compact} />
+                ))}
+              </View>
+            </Section>
+          </View>
 
-            <View style={[styles.innerCard, compact && styles.innerCardCompact, styles.savingsCard]}>
-              <View style={[styles.accentStrip, styles.savingsAccent]} />
-              <View style={styles.savingsTop}>
-                <View>
-                  <Text style={styles.accountName}>Kolesnikov Volodymyr</Text>
-                  <Text style={styles.iban}>Savings account</Text>
-                </View>
-                <Text style={styles.balanceAmount}>
-                  270,00
-                  <Text style={styles.currencyLabel}> EUR</Text>
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Spending report" actionLabel="Detail" compact={compact}>
+              <View style={styles.spendingDiff}>
+                <Text style={[styles.spendingDiffLabel, compact && styles.metaCompact]}>Difference</Text>
+                <Text style={styles.spendingDiffValue}>
+                  <Text style={styles.spendingDiffMinus}>—</Text>19,84
+                  <Text style={styles.inlineCurrency}> EUR</Text>
                 </Text>
               </View>
-            </View>
+
+              <View style={styles.spendingSummaryRow}>
+                <View style={styles.spendingSummaryCol}>
+                  <Text style={[styles.spendingSummaryLabel, compact && styles.metaCompact]}>Expenses</Text>
+                  <Text style={styles.spendingExpenses}>
+                    1 025,34
+                    <Text style={styles.inlineCurrency}> EUR</Text>
+                  </Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.spendingSummaryCol}>
+                  <Text style={[styles.spendingSummaryLabel, compact && styles.metaCompact]}>Incomes</Text>
+                  <Text style={styles.spendingIncomes}>
+                    1 005,50
+                    <Text style={styles.inlineCurrency}> EUR</Text>
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.spendingMain, compact && styles.spendingMainCompact]}>
+                <DonutChart />
+                <View style={styles.legendList}>
+                  {DONUT_LEGEND.slice(0, 4).map((item) => (
+                    <LegendItem key={item.id} label={item.label} color={item.color} share={item.share} />
+                  ))}
+                </View>
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Loans" actionLabel="Add product" compact={compact}>
+              <View style={styles.illustrationRow}>
+                <PhotoStack />
+                <Text style={[styles.illustrationText, compact && styles.illustrationTextCompact]}>
+                  Ask for a Loan and we will contact you with an offer.
+                </Text>
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Branches and ATMs" actionLabel="Show" compact={compact}>
+              <MapPlaceholder />
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Exchange rates" actionLabel="Detail" compact={compact}>
+              <View>
+                {EXCHANGE_RATES.map((rate) => (
+                  <RateRow key={rate.id} rate={rate} compact={compact} />
+                ))}
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="DDS pension" actionLabel="Add product" compact={compact}>
+              <View style={styles.illustrationRow}>
+                <View style={styles.ddsLogoWrap}>
+                  <Text style={styles.ddsLogo}>DDS</Text>
+                </View>
+                <Text style={[styles.illustrationText, compact && styles.illustrationTextCompact]}>
+                  Open a DDS pension saving and secure a better pension.
+                </Text>
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Assets and Liabilities" actionLabel="Detail" compact={compact}>
+              <View style={styles.assetsDiff}>
+                <Text style={[styles.spendingDiffLabel, compact && styles.metaCompact]}>Difference:</Text>
+                <Text style={styles.assetsDiffValue}>
+                  <Text style={styles.assetsDiffPlus}>+</Text>273,71
+                  <Text style={styles.inlineCurrency}> EUR</Text>
+                </Text>
+              </View>
+
+              <View style={styles.assetsGrid}>
+                <View style={styles.assetsCol}>
+                  <Text style={[styles.assetsLabel, compact && styles.metaCompact]}>Assets</Text>
+                  <Text style={styles.assetsValuePositive}>
+                    273,71
+                    <Text style={styles.inlineCurrency}> EUR</Text>
+                  </Text>
+                  <View style={[styles.assetsBar, styles.assetsBarFilled]}>
+                    <Text style={styles.assetsBarText}>100 %</Text>
+                  </View>
+                </View>
+
+                <View style={styles.assetsCol}>
+                  <Text style={[styles.assetsLabel, compact && styles.metaCompact]}>Liabilities</Text>
+                  <Text style={styles.assetsValueNegative}>
+                    0,00
+                    <Text style={styles.inlineCurrency}> EUR</Text>
+                  </Text>
+                  <View style={[styles.assetsBar, styles.assetsBarEmpty]} />
+                </View>
+              </View>
+            </Section>
+          </View>
+
+          <View style={[styles.divider, { height: dividerHeight }]} />
+
+          <View
+            style={[
+              styles.section,
+              {
+                paddingHorizontal: sectionPaddingX,
+                paddingTop: sectionPaddingTop,
+                paddingBottom: sectionPaddingBottom,
+              },
+            ]}
+          >
+            <Section title="Mutual funds" actionLabel="Add product" compact={compact}>
+              <View style={styles.illustrationRow}>
+                <View style={styles.chessWrap}>
+                  <Text style={styles.chessPiece}>♘</Text>
+                  <Text style={[styles.chessPiece, styles.chessPieceDark]}>♞</Text>
+                  <Text style={[styles.chessPiece, styles.chessPieceSide]}>♜</Text>
+                </View>
+                <Text style={[styles.illustrationText, compact && styles.illustrationTextCompact]}>
+                  Make the right move for your savings and let them grow.
+                </Text>
+              </View>
+            </Section>
           </View>
         </ScrollView>
 
-        <BottomNavBar compact={compact} bottomInset={insets.bottom} />
+        <BottomNav compact={compact} bottomInset={insets.bottom} />
       </View>
     </SafeAreaView>
   );
@@ -452,71 +856,90 @@ export default function NativeTatraHomeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: COLORS.divider,
+    backgroundColor: COLORS.bgBlack,
     alignItems: 'center',
   },
   phone: {
     flex: 1,
     width: '100%',
-    backgroundColor: COLORS.page,
-    alignSelf: 'center',
     maxWidth: 390,
+    alignSelf: 'center',
+    backgroundColor: COLORS.bgPage,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 104,
+    paddingBottom: 110,
+  },
+  statusBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  statusBarText: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  statusBarTextCompact: {
+    fontSize: 14,
+  },
+  statusBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  mailWrap: {
-    width: 28,
-    height: 28,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   mailIcon: {
+    width: 26,
+    height: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  mailGlyph: {
     color: COLORS.accentBlue,
-    fontSize: 18,
-    lineHeight: 18,
+    fontSize: 19,
+    lineHeight: 19,
   },
   mailBadge: {
     position: 'absolute',
-    top: -2,
-    right: -4,
+    top: -4,
+    right: -5,
     minWidth: 17,
     height: 17,
-    paddingHorizontal: 4,
     borderRadius: 9,
+    paddingHorizontal: 4,
     backgroundColor: COLORS.accentBlue,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   mailBadgeText: {
     color: COLORS.textPrimary,
     fontSize: 10,
     fontWeight: '600',
   },
-  logo: {
-    width: 42,
-    height: 24,
-    flexDirection: 'row',
-    gap: 3,
-    transform: [{ skewX: '-18deg' }],
-  },
-  logoCompact: {
+  tbLogo: {
     width: 38,
     height: 22,
+    flexDirection: 'row',
+    gap: 3,
+    transform: [{ skewX: '-20deg' }],
   },
-  logoBar: {
+  tbLogoCompact: {
+    width: 34,
+    height: 20,
+  },
+  tbLogoBar: {
     flex: 1,
     backgroundColor: COLORS.textPrimary,
-    borderRadius: 1,
   },
   actionLinkWrap: {
     paddingVertical: 2,
@@ -527,124 +950,341 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   actionLinkCompact: {
-    fontSize: 14,
+    fontSize: 15,
   },
-  sectionDivider: {
-    height: 11,
-    backgroundColor: COLORS.divider,
+  divider: {
+    backgroundColor: COLORS.bgBlack,
   },
   section: {
-    backgroundColor: COLORS.page,
+    backgroundColor: COLORS.bgPage,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
-    marginBottom: 16,
+    marginBottom: 18,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   sectionTitle: {
     color: COLORS.textPrimary,
     fontSize: 26,
     fontWeight: '500',
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   sectionTitleCompact: {
     fontSize: 23,
   },
+  newBadge: {
+    backgroundColor: COLORS.purple,
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    transform: [{ translateY: -4 }],
+  },
+  newBadgeText: {
+    color: COLORS.textPrimary,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
   innerCard: {
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.bgCard,
     borderRadius: 10,
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 20,
   },
-  innerCardCompact: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 18,
-  },
   accountName: {
     color: COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '500',
-    marginBottom: 6,
+    marginBottom: 5,
+  },
+  accountNameCompact: {
+    fontSize: 17,
   },
   iban: {
-    color: COLORS.textTertiary,
+    color: COLORS.textIban,
     fontSize: 14,
-    letterSpacing: 0.6,
-    marginBottom: 24,
+    letterSpacing: 0.5,
+    marginBottom: 22,
   },
-  ibanEm: {
-    color: '#B8B8BC',
+  ibanHighlight: {
+    color: '#D8D8DC',
+  },
+  metaCompact: {
+    fontSize: 13,
   },
   balanceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    paddingTop: 18,
     borderTopWidth: 1,
     borderTopColor: COLORS.dividerLine,
+    paddingTop: 16,
+    gap: 16,
   },
   balanceLabel: {
     color: COLORS.textSecondary,
     fontSize: 14,
-    marginBottom: 5,
+    marginBottom: 4,
   },
   balanceAmount: {
     color: COLORS.textPrimary,
     fontSize: 22,
     fontWeight: '500',
   },
-  currencyLabel: {
+  balanceAmountCompact: {
+    fontSize: 20,
+  },
+  inlineCurrency: {
     color: COLORS.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '400',
-    letterSpacing: 0.5,
+    marginLeft: 3,
   },
   sparkline: {
     width: 130,
-    height: 45,
+    height: 42,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingHorizontal: 2,
   },
   sparklineCompact: {
     width: 112,
-    height: 40,
+    height: 38,
   },
-  sparklineBarWrap: {
-    width: 12,
+  sparklineTrack: {
+    width: 11,
     height: '100%',
     justifyContent: 'flex-end',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 118, 78, 0.12)',
+    borderBottomColor: 'rgba(0,118,78,0.12)',
   },
   sparklineBar: {
     width: 10,
     borderRadius: 2,
-    backgroundColor: COLORS.successChart,
-    opacity: 0.95,
+    backgroundColor: COLORS.chartGreen,
+  },
+  cardVisual: {
+    width: '100%',
+    aspectRatio: 1.586,
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#2A2433',
+  },
+  cardVisualCompact: {
+    marginBottom: 14,
+  },
+  cardGlowOne: {
+    position: 'absolute',
+    top: -18,
+    left: -20,
+    width: 180,
+    height: 120,
+    borderRadius: 90,
+    backgroundColor: '#8B7BA8',
+    opacity: 0.32,
+  },
+  cardGlowTwo: {
+    position: 'absolute',
+    bottom: -18,
+    right: -14,
+    width: 140,
+    height: 100,
+    borderRadius: 70,
+    backgroundColor: '#4A4156',
+    opacity: 0.42,
+  },
+  cardVisa: {
+    position: 'absolute',
+    top: 14,
+    right: 16,
+    color: COLORS.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 1,
+    fontStyle: 'italic',
+  },
+  cardChip: {
+    position: 'absolute',
+    bottom: 14,
+    right: 16,
+    width: 26,
+    height: 20,
+    borderRadius: 3,
+    backgroundColor: '#8F7546',
+  },
+  cardStripe: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    width: 14,
+    height: 12,
+    backgroundColor: COLORS.textPrimary,
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }],
+  },
+  cardDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 18,
+  },
+  cardDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4A4A52',
+  },
+  cardDotActive: {
+    backgroundColor: COLORS.accentBlue,
+  },
+  cardInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  cardHolder: {
+    color: COLORS.textPrimary,
+    fontSize: 17,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  cardNumber: {
+    color: COLORS.textIban,
+    fontSize: 13,
+  },
+  cardBalanceRight: {
+    alignItems: 'flex-end',
+  },
+  cardBalanceAmount: {
+    color: COLORS.textPrimary,
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  cardBalanceAmountCompact: {
+    fontSize: 17,
+  },
+  cardBalanceSub: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  cardActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 20,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.dividerLine,
+  },
+  cardAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardActionIcon: {
+    color: COLORS.accentBlue,
+    fontSize: 17,
+  },
+  cardActionText: {
+    color: COLORS.accentBlue,
+    fontSize: 14,
+  },
+  savingsCard: {
+    backgroundColor: COLORS.bgCard,
+    borderRadius: 10,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  savingsAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: COLORS.purple,
+  },
+  savingsTop: {
+    paddingTop: 16,
+    paddingRight: 20,
+    paddingBottom: 14,
+    paddingLeft: 22,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.dividerLine,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  savingsSub: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+  },
+  savingsSubValue: {
+    color: COLORS.textPrimary,
+  },
+  savingsAmount: {
+    color: COLORS.textPrimary,
+    fontSize: 20,
+    fontWeight: '500',
+  },
+  savingsHint: {
+    paddingTop: 14,
+    paddingRight: 20,
+    paddingBottom: 16,
+    paddingLeft: 22,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  infoIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.textTertiary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  infoIconText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  savingsHintText: {
+    flex: 1,
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
   },
   roomCard: {
-    position: 'relative',
-    backgroundColor: COLORS.card,
+    backgroundColor: COLORS.bgCard,
     borderRadius: 10,
     paddingTop: 16,
     paddingRight: 20,
     paddingBottom: 16,
     paddingLeft: 22,
     marginBottom: 10,
+    position: 'relative',
   },
   roomCardCompact: {
     paddingRight: 16,
     paddingLeft: 18,
   },
   roomCardPressed: {
-    backgroundColor: '#32343A',
+    backgroundColor: COLORS.bgCardPressed,
   },
-  accentStrip: {
+  roomAccent: {
     position: 'absolute',
     left: 0,
     top: 12,
@@ -657,10 +1297,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
     gap: 12,
+    marginBottom: 14,
   },
-  roomTopLeft: {
+  roomTextBlock: {
     flex: 1,
   },
   roomName: {
@@ -672,60 +1312,53 @@ const styles = StyleSheet.create({
   roomNameCompact: {
     fontSize: 16,
   },
-  roomSub: {
+  roomSubtitle: {
     color: COLORS.textSecondary,
     fontSize: 13,
+    marginBottom: 6,
   },
-  roomSubCompact: {
+  roomSubtitleCompact: {
     fontSize: 12,
   },
-  roomSubMuted: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    marginTop: 4,
-  },
-  roomBalance: {
+  roomBalanceBlock: {
     alignItems: 'flex-end',
   },
-  roomBalanceCompact: {
-    alignItems: 'flex-start',
-  },
-  roomBalanceAmount: {
+  roomBalance: {
     color: COLORS.textPrimary,
     fontSize: 20,
     fontWeight: '500',
   },
-  roomBalanceAmountCompact: {
+  roomBalanceCompact: {
     fontSize: 18,
   },
-  currencyTiny: {
+  roomBalanceLabel: {
     color: COLORS.textSecondary,
-    fontSize: 12,
-  },
-  statusPill: {
-    alignSelf: 'flex-start',
+    fontSize: 13,
     marginTop: 4,
+  },
+  pill: {
+    alignSelf: 'flex-start',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  statusPillOk: {
-    backgroundColor: 'rgba(46, 184, 114, 0.18)',
+  pillOk: {
+    backgroundColor: 'rgba(57,198,155,0.15)',
   },
-  statusPillOwe: {
-    backgroundColor: 'rgba(231, 76, 60, 0.18)',
+  pillOwe: {
+    backgroundColor: 'rgba(195,98,89,0.18)',
   },
-  statusPillText: {
+  pillText: {
     fontSize: 11,
     fontWeight: '500',
   },
-  statusPillTextOk: {
+  pillTextOk: {
     color: COLORS.success,
   },
-  statusPillTextOwe: {
+  pillTextOwe: {
     color: COLORS.danger,
   },
-  membersRow: {
+  roomMembersRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -733,7 +1366,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: COLORS.dividerLine,
   },
-  avatars: {
+  avatarRow: {
     flexDirection: 'row',
   },
   avatar: {
@@ -741,177 +1374,500 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: COLORS.card,
-    alignItems: 'center',
+    borderColor: COLORS.bgCard,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarOverlap: {
     marginLeft: -9,
   },
   avatarText: {
     color: COLORS.textPrimary,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
   },
-  membersCount: {
+  roomFooter: {
     color: COLORS.textSecondary,
     fontSize: 13,
     marginLeft: 'auto',
   },
   addRoomButton: {
+    width: '100%',
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.13)',
     borderRadius: 10,
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 13,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
   },
-  addRoomButtonCompact: {
-    paddingHorizontal: 16,
+  addRoomButtonPressed: {
+    opacity: 0.86,
   },
-  addIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  addRoomIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: COLORS.accentBlue,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addIconText: {
+  addRoomIconText: {
     color: COLORS.textPrimary,
     fontSize: 22,
-    fontWeight: '400',
     lineHeight: 22,
   },
-  addRoomText: {
+  addRoomLabel: {
     color: COLORS.textPrimary,
-    fontSize: 15,
-  },
-  addRoomTextCompact: {
     fontSize: 14,
   },
-  cardVisual: {
-    width: '100%',
-    aspectRatio: 1.586,
-    borderRadius: 14,
-    backgroundColor: '#202744',
-    overflow: 'hidden',
-    marginBottom: 16,
-    position: 'relative',
+  addRoomLabelCompact: {
+    fontSize: 13,
   },
-  cardVisualCompact: {
-    borderRadius: 12,
-    marginBottom: 14,
-  },
-  cardGlow: {
-    position: 'absolute',
-    top: -20,
-    left: -30,
-    width: 220,
-    height: 150,
-    borderRadius: 110,
-    backgroundColor: '#33456A',
-    opacity: 0.5,
-  },
-  cardVisa: {
-    position: 'absolute',
-    top: 16,
-    right: 18,
-    color: COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 2,
-    fontStyle: 'italic',
-  },
-  cardChip: {
-    position: 'absolute',
-    bottom: 14,
-    right: 18,
-    width: 28,
-    height: 22,
-    borderRadius: 3,
-    backgroundColor: '#A69063',
-  },
-  cardDots: {
+  quickPayGrid: {
     flexDirection: 'row',
+    gap: 8,
+  },
+  quickPayItem: {
+    flex: 1,
+    backgroundColor: COLORS.bgCard,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingTop: 14,
+    paddingBottom: 12,
+    alignItems: 'center',
+  },
+  quickPayAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    marginBottom: 14,
+    marginBottom: 8,
   },
-  cardDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.textTertiary,
-  },
-  cardDotActive: {
-    backgroundColor: COLORS.accentBlue,
-  },
-  cardBalanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginTop: 4,
-  },
-  cardHolder: {
+  quickPayAvatarText: {
     color: COLORS.textPrimary,
-    fontSize: 17,
-    fontWeight: '500',
-    marginBottom: 2,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
-  cardNumber: {
-    color: COLORS.textTertiary,
-    fontSize: 14,
-  },
-  cardBalanceRight: {
-    alignItems: 'flex-end',
-  },
-  cardBalanceAmount: {
-    color: COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: '500',
-  },
-  cardBalanceSub: {
+  quickPayName: {
     color: COLORS.textSecondary,
     fontSize: 12,
-    marginTop: 2,
+    lineHeight: 15,
+    textAlign: 'center',
+    minHeight: 30,
   },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 18,
-    paddingTop: 18,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.dividerLine,
+  quickPayNameCompact: {
+    fontSize: 11,
+    lineHeight: 14,
   },
-  cardAction: {
+  spendingDiff: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  spendingDiffLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  spendingDiffValue: {
+    color: COLORS.danger,
+    fontSize: 20,
+    fontWeight: '500',
+  },
+  spendingDiffMinus: {
+    color: COLORS.danger,
+    marginRight: 4,
+  },
+  spendingSummaryRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 28,
+    marginBottom: 24,
+    paddingBottom: 4,
+  },
+  spendingSummaryCol: {
+    alignItems: 'center',
+  },
+  summaryDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: COLORS.dividerLine,
+  },
+  spendingSummaryLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    marginBottom: 3,
+  },
+  spendingExpenses: {
+    color: COLORS.danger,
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  spendingIncomes: {
+    color: COLORS.success,
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  spendingMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  spendingMainCompact: {
+    gap: 12,
+  },
+  donutWrap: {
+    width: 156,
+    height: 156,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  donutBase: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 22,
+    borderColor: COLORS.donutGrey,
+    opacity: 0.34,
+  },
+  donutArc: {
+    position: 'absolute',
+    width: 66,
+    height: 16,
+    borderRadius: 8,
+  },
+  donutArcGrey: {
+    backgroundColor: COLORS.donutGrey,
+    transform: [{ translateX: 22 }, { translateY: 0 }],
+  },
+  donutArcOrange: {
+    backgroundColor: COLORS.orange,
+    transform: [{ translateX: -36 }, { translateY: 26 }, { rotate: '-18deg' }],
+  },
+  donutArcYellow: {
+    backgroundColor: COLORS.yellow,
+    transform: [{ translateX: -42 }, { translateY: -8 }, { rotate: '-64deg' }],
+  },
+  donutArcBlue: {
+    backgroundColor: COLORS.donutBlue,
+    transform: [{ translateX: -4 }, { translateY: -42 }, { rotate: '36deg' }],
+  },
+  donutArcCyan: {
+    backgroundColor: COLORS.donutCyan,
+    transform: [{ translateX: 26 }, { translateY: -26 }, { rotate: '72deg' }],
+  },
+  donutHole: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.bgPage,
+    zIndex: 2,
+  },
+  donutShareLabel: {
+    position: 'absolute',
+    color: COLORS.textPrimary,
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  share60: {
+    right: 22,
+    top: 72,
+    fontSize: 11,
+  },
+  share17: {
+    left: 18,
+    bottom: 34,
+  },
+  share9Left: {
+    left: 16,
+    top: 78,
+  },
+  share9Top: {
+    left: 54,
+    top: 20,
+  },
+  share5: {
+    right: 44,
+    top: 18,
+  },
+  legendList: {
+    flex: 1,
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  legendDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legendDotInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 14,
+  },
+  legendShare: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+  },
+  illustrationRow: {
+    flexDirection: 'row',
+    gap: 14,
+    alignItems: 'center',
+  },
+  illustrationText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  illustrationTextCompact: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  photoStack: {
+    width: 90,
+    height: 70,
+    position: 'relative',
+  },
+  photoCard: {
+    position: 'absolute',
+    width: 42,
+    height: 42,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.textPrimary,
+  },
+  photoOne: {
+    top: 5,
+    left: 0,
+    backgroundColor: '#8B6F5A',
+    transform: [{ rotate: '-8deg' }],
+  },
+  photoTwo: {
+    top: 8,
+    left: 25,
+    backgroundColor: '#A8B5C4',
+    transform: [{ rotate: '3deg' }],
+  },
+  photoThree: {
+    top: 22,
+    left: 14,
+    backgroundColor: '#6B5A48',
+    transform: [{ rotate: '-3deg' }],
+  },
+  mapPlaceholder: {
+    height: 120,
+    justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
   },
-  cardActionIcon: {
-    color: COLORS.accentBlue,
-    fontSize: 16,
+  mapCanvas: {
+    width: 200,
+    height: 80,
+    position: 'relative',
   },
-  cardActionText: {
-    color: COLORS.accentBlue,
+  mapStroke: {
+    position: 'absolute',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 20,
+  },
+  mapStrokeOne: {
+    left: 18,
+    top: 22,
+    width: 164,
+    height: 34,
+  },
+  mapStrokeTwo: {
+    left: 38,
+    top: 18,
+    width: 118,
+    height: 44,
+  },
+  mapPin: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.accentBlue,
+  },
+  mapPinOne: {
+    left: 52,
+    top: 40,
+  },
+  mapPinTwo: {
+    left: 74,
+    top: 32,
+  },
+  mapPinThree: {
+    left: 99,
+    top: 36,
+  },
+  mapPinFour: {
+    left: 143,
+    top: 32,
+  },
+  mapPinFive: {
+    left: 164,
+    top: 40,
+  },
+  mapHint: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+  },
+  rateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.dividerLine,
+  },
+  rateFlag: {
+    width: 28,
+    height: 20,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rateFlagText: {
+    color: COLORS.bgBlack,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  rateCountry: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 15,
+  },
+  rateCountryCompact: {
     fontSize: 14,
   },
-  savingsCard: {
-    position: 'relative',
-    paddingLeft: 26,
+  rateCode: {
+    width: 40,
+    color: COLORS.textIban,
+    fontSize: 14,
+    textAlign: 'center',
   },
-  savingsAccent: {
-    backgroundColor: COLORS.purple,
+  rateValue: {
+    width: 80,
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'right',
   },
-  savingsTop: {
+  rateTrend: {
+    width: 14,
+    color: COLORS.textTertiary,
+    textAlign: 'center',
+  },
+  ddsLogoWrap: {
+    width: 90,
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ddsLogo: {
+    color: '#C8C8CC',
+    fontSize: 40,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    letterSpacing: -2,
+  },
+  assetsDiff: {
+    alignItems: 'center',
+    marginBottom: 22,
+  },
+  assetsDiffValue: {
+    color: COLORS.textPrimary,
+    fontSize: 32,
+    fontWeight: '500',
+  },
+  assetsDiffPlus: {
+    color: COLORS.success,
+    marginRight: 6,
+  },
+  assetsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 12,
+    gap: 24,
+  },
+  assetsCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  assetsLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  assetsValuePositive: {
+    color: COLORS.success,
+    fontSize: 17,
+    fontWeight: '500',
+    marginBottom: 14,
+  },
+  assetsValueNegative: {
+    color: COLORS.danger,
+    fontSize: 17,
+    fontWeight: '500',
+    marginBottom: 14,
+  },
+  assetsBar: {
+    width: '100%',
+    height: 140,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assetsBarFilled: {
+    backgroundColor: COLORS.successDeep,
+  },
+  assetsBarEmpty: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: COLORS.textTertiary,
+  },
+  assetsBarText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  chessWrap: {
+    width: 90,
+    height: 70,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  chessPiece: {
+    color: '#D8D8DC',
+    fontSize: 28,
+  },
+  chessPieceDark: {
+    color: '#A5A5A9',
+  },
+  chessPieceSide: {
+    fontSize: 26,
   },
   bottomNav: {
     position: 'absolute',
@@ -919,36 +1875,47 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     paddingTop: 8,
-    paddingBottom: 22,
-    backgroundColor: COLORS.page,
+    paddingHorizontal: 6,
+    backgroundColor: COLORS.bgPage,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  navItem: {
+  bottomNavItem: {
+    flex: 1,
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
+    gap: 4,
     paddingVertical: 4,
   },
-  navIcon: {
+  bottomNavItemCenter: {
+    marginTop: -14,
+  },
+  centerNavIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: COLORS.accentBlue,
+    backgroundColor: COLORS.bgPage,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomNavIcon: {
     color: COLORS.textSecondary,
-    fontSize: 22,
-    lineHeight: 22,
+    fontSize: 21,
+    lineHeight: 21,
   },
-  navIconCompact: {
-    fontSize: 20,
-    lineHeight: 20,
+  bottomNavIconCompact: {
+    fontSize: 19,
+    lineHeight: 19,
   },
-  navLabel: {
+  bottomNavIconActive: {
+    color: COLORS.accentBlue,
+  },
+  bottomNavLabel: {
     color: COLORS.textSecondary,
     fontSize: 10.5,
-  },
-  navLabelCompact: {
-    fontSize: 10,
-  },
-  navItemActive: {
-    color: COLORS.accentBlue,
+    textAlign: 'center',
   },
 });

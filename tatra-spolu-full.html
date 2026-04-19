@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tatra banka — Spolu</title>
+<style>
+:root {
+  /* Точные цвета из пипетки */
+  --bg-page: #1D1E23;
+  --bg-black: #000000;
+  --bg-card: #28292E;
+  --bg-card-pressed: #32343A;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #A5A5A9;
+  --text-tertiary: #6C6C70;
+  --text-iban: #6C6C70;
+
+  --accent-blue: #3390DD;
+  --qp-blue: #3E76CB;
+  --qp-burgundy: #96194A;
+  --qp-green: #2A8947;
+
+  --color-success: #39C69B;
+  --color-success-deep: #136650;
+  --chart-green: #00764E;
+  --chart-green-fill: rgba(0,118,78, 0.35);
+
+  --color-danger: #C36259;
+  --color-purple: #5B4ACA;
+
+  /* Donut colors */
+  --d-grey: #5A6B7A;
+  --d-orange: #C94D17;
+  --d-yellow: #C9B019;
+  --d-blue: #025AA1;
+  --d-cyan: #1E90D4;
+
+  --divider-line: rgba(255, 255, 255, 0.08);
+  --radius-card: 10px;
+  --divider-h: 11px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #000;
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+
+.phone {
+  max-width: 390px;
+  margin: 0 auto;
+  background: var(--bg-page);
+  min-height: 100vh;
+  padding-bottom: 90px;
+  position: relative;
+}
+
+/* ===== Status bar ===== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.sb-right {
+  display: flex; gap: 6px; align-items: center;
+  font-size: 13px;
+}
+
+/* ===== Top bar ===== */
+.top-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 14px 20px 18px;
+}
+
+.mail-icon {
+  position: relative;
+  width: 26px; height: 26px;
+  color: var(--accent-blue);
+  justify-self: start;
+}
+.mail-badge {
+  position: absolute;
+  top: -3px; right: -5px;
+  background: var(--accent-blue);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 17px; height: 17px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tb-logo {
+  width: 38px;
+  height: 22px;
+  display: flex;
+  gap: 3px;
+  transform: skewX(-20deg);
+}
+.tb-logo span {
+  flex: 1;
+  background: white;
+}
+
+.customize-btn {
+  color: var(--accent-blue);
+  font-size: 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  justify-self: end;
+  padding: 0;
+}
+
+/* ===== Section divider (чёрная полоса 11px) ===== */
+.divider {
+  height: var(--divider-h);
+  background: var(--bg-black);
+}
+.divider.thick { height: 15px; }
+
+/* ===== Section ===== */
+.section {
+  background: var(--bg-page);
+  padding: 20px 20px 24px;
+}
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 18px;
+}
+.section-title {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+}
+.action-link {
+  color: var(--accent-blue);
+  font-size: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ===== Inner card ===== */
+.inner-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-card);
+  padding: 18px 20px 20px;
+  position: relative;
+}
+
+/* ===== ACCOUNTS ===== */
+.account-name {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+.iban {
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, monospace;
+  color: var(--text-iban);
+  letter-spacing: 0.5px;
+  margin-bottom: 22px;
+}
+.iban .em { color: #D8D8DC; }
+
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-top: 1px solid var(--divider-line);
+  padding-top: 16px;
+}
+.balance-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.balance-amount {
+  font-size: 22px;
+  font-weight: 500;
+}
+.balance-amount .curr {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  margin-left: 5px;
+  letter-spacing: 0.5px;
+}
+.mini-chart {
+  width: 130px;
+  height: 42px;
+}
+
+/* ===== CARDS ===== */
+.card-visual-wrap {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 0 20px;
+  margin: 0 -20px;
+  scroll-snap-type: x mandatory;
+}
+.card-visual-wrap::-webkit-scrollbar { display: none; }
+
+.card-visual {
+  flex: 0 0 240px;
+  aspect-ratio: 1.586;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  scroll-snap-align: center;
+}
+.card-visual.primary {
+  background: linear-gradient(135deg, #8B7BA8 0%, #4A4156 50%, #2A2433 100%);
+}
+.card-visual.primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 40%, rgba(180,180,200,0.4) 0%, transparent 20%),
+    radial-gradient(circle at 70% 60%, rgba(90,60,120,0.6) 0%, transparent 30%);
+}
+.card-visa {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  color: white;
+  font-weight: 700;
+  font-size: 17px;
+  font-style: italic;
+  letter-spacing: 1px;
+  z-index: 2;
+}
+.card-chip {
+  position: absolute;
+  bottom: 14px;
+  right: 16px;
+  width: 26px;
+  height: 20px;
+  background: linear-gradient(135deg, #D4B88A 0%, #8F7546 100%);
+  border-radius: 3px;
+  z-index: 2;
+}
+.card-stripe {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  width: 14px;
+  height: 12px;
+  background: white;
+  z-index: 2;
+  clip-path: polygon(0 0, 40% 0, 100% 50%, 40% 100%, 0 100%, 50% 50%);
+}
+.card-visual.empty {
+  background: var(--bg-card);
+}
+
+.card-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 16px 0 18px;
+}
+.card-dots .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #4A4A52;
+}
+.card-dots .dot.active { background: var(--accent-blue); }
+
+.card-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.card-holder { font-size: 17px; font-weight: 500; margin-bottom: 4px; }
+.card-number { font-size: 13px; color: var(--text-iban); font-family: ui-monospace, Consolas, monospace; }
+.card-balance-right { text-align: right; }
+.card-balance-amount { font-size: 18px; font-weight: 500; }
+.card-balance-amount .curr { font-size: 12px; color: var(--text-secondary); margin-left: 3px; }
+.card-balance-sub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+
+.card-actions {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--divider-line);
+}
+.card-action {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--accent-blue);
+  font-size: 14px;
+  cursor: pointer;
+}
+.card-action svg { width: 17px; height: 17px; }
+
+/* ===== SAVINGS ===== */
+.savings-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  position: relative;
+}
+.savings-card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--color-purple);
+}
+.savings-top {
+  padding: 16px 20px 14px 22px;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--divider-line);
+}
+.savings-info .s-name {
+  font-size: 17px;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.savings-info .s-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.savings-info .s-sub .s-val {
+  color: var(--text-primary);
+}
+.savings-amount {
+  font-size: 20px;
+  font-weight: 500;
+}
+.savings-amount .curr { font-size: 12px; color: var(--text-secondary); margin-left: 3px; }
+
+.savings-hint {
+  padding: 14px 20px 16px 22px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.info-icon {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-style: italic;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+/* ===== SPOLU ===== */
+.spolu-room {
+  background: var(--bg-card);
+  border-radius: var(--radius-card);
+  padding: 16px 20px 16px 22px;
+  margin-bottom: 10px;
+  position: relative;
+  cursor: pointer;
+}
+.spolu-room:last-of-type { margin-bottom: 14px; }
+.spolu-room::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 12px; bottom: 12px;
+  width: 4px;
+  border-radius: 0 2px 2px 0;
+}
+.spolu-room.trip::before { background: var(--color-purple); }
+.spolu-room.flat::before { background: var(--accent-blue); }
+
+.spolu-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.spolu-name {
+  font-size: 17px;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+.spolu-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.spolu-balance { text-align: right; }
+.spolu-amount {
+  font-size: 20px;
+  font-weight: 500;
+}
+.spolu-amount .curr { font-size: 12px; color: var(--text-secondary); margin-left: 3px; }
+
+.pill {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.pill.ok  { background: rgba(57,198,155,0.15); color: var(--color-success); }
+.pill.owe { background: rgba(195,98,89,0.18); color: var(--color-danger); }
+
+.members-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--divider-line);
+}
+.avatars { display: flex; }
+.avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+  margin-left: -9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+}
+.avatar:first-child { margin-left: 0; }
+.avatar.a1 { background: var(--color-purple); }
+.avatar.a2 { background: var(--color-danger); }
+.avatar.a3 { background: var(--qp-green); }
+.avatar.a4 { background: var(--qp-burgundy); }
+
+.members-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+.add-room {
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.13);
+  border-radius: var(--radius-card);
+  padding: 13px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  width: 100%;
+  color: var(--text-primary);
+}
+.add-icon {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: white;
+  line-height: 1;
+  font-weight: 400;
+}
+.add-text { font-size: 14px; }
+
+.spolu-badge-new {
+  display: inline-block;
+  background: var(--color-purple);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 1px;
+  margin-left: 10px;
+  vertical-align: middle;
+  transform: translateY(-4px);
+}
+
+/* ===== QUICK PAY ===== */
+.qp-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.qp-item {
+  background: var(--bg-card);
+  border-radius: var(--radius-card);
+  padding: 14px 8px 12px;
+  text-align: center;
+  cursor: pointer;
+}
+.qp-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+.qp-avatar.c1 { background: var(--qp-blue); }
+.qp-avatar.c2 { background: var(--qp-burgundy); }
+.qp-avatar.c3 { background: var(--qp-green); }
+.qp-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  height: 2.6em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ===== SPENDING REPORT ===== */
+.sp-difference {
+  text-align: center;
+  margin-bottom: 10px;
+}
+.sp-diff-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.sp-diff-value {
+  font-size: 20px;
+  font-weight: 500;
+}
+.sp-diff-value.neg { color: var(--color-danger); }
+.sp-diff-value .curr { font-size: 13px; color: var(--text-secondary); margin-left: 4px; font-weight: 400; }
+.sp-diff-value .minus { color: var(--color-danger); margin-right: 4px; }
+
+.sp-ei-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+  margin-bottom: 24px;
+  padding-bottom: 4px;
+}
+.sp-ei-row .divider-v {
+  width: 1px;
+  height: 40px;
+  background: var(--divider-line);
+}
+.sp-ei-col { text-align: center; }
+.sp-ei-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+}
+.sp-ei-value {
+  font-size: 18px;
+  font-weight: 500;
+}
+.sp-ei-value.exp { color: var(--color-danger); }
+.sp-ei-value.inc { color: var(--color-success); }
+.sp-ei-value .curr { font-size: 11px; margin-left: 3px; font-weight: 400; opacity: 0.8; }
+
+.sp-main {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.donut-wrap { position: relative; }
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.donut-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.donut-dot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.donut-dot.grey { background: rgba(90,107,122,0.25); color: var(--d-grey); }
+.donut-dot.orange { background: rgba(201,77,23,0.2); color: var(--d-orange); }
+.donut-dot.yellow { background: rgba(201,176,25,0.2); color: var(--d-yellow); }
+.donut-dot.blue { background: rgba(2,90,161,0.25); color: var(--d-cyan); }
+.donut-dot svg { width: 12px; height: 12px; }
+.donut-label {
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== LOANS / Mutual funds / DDS (illustration cards) ===== */
+.illus-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.illus-img {
+  width: 90px; height: 70px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.illus-text {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+/* DDS logo */
+.dds-logo {
+  font-size: 40px;
+  font-weight: 700;
+  font-style: italic;
+  color: #C8C8CC;
+  text-shadow: 0 0 20px rgba(255,255,255,0.1);
+  letter-spacing: -2px;
+}
+
+/* Photo stack for Loans */
+.photo-stack {
+  position: relative;
+  width: 90px; height: 70px;
+}
+.photo-stack .photo {
+  position: absolute;
+  width: 42px; height: 42px;
+  background: #5A5A5A;
+  border: 1.5px solid white;
+  border-radius: 2px;
+}
+.photo-stack .p1 { top: 5px; left: 0; transform: rotate(-8deg); background: #8B6F5A; }
+.photo-stack .p2 { top: 8px; left: 25px; transform: rotate(3deg); background: #A8B5C4; }
+.photo-stack .p3 { top: 22px; left: 14px; transform: rotate(-3deg); background: #6B5A48; }
+
+/* ===== BRANCHES & ATMs ===== */
+.map-placeholder {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.map-svg {
+  width: 200px;
+  height: 80px;
+}
+
+/* ===== EXCHANGE RATES ===== */
+.rate-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 50px 90px 20px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider-line);
+  gap: 10px;
+  font-size: 15px;
+}
+.rate-row:last-child { border-bottom: none; }
+.rate-flag {
+  width: 28px; height: 20px;
+  border-radius: 2px;
+  overflow: hidden;
+  display: block;
+}
+.rate-country { font-size: 15px; }
+.rate-code { color: var(--text-iban); font-size: 14px; font-family: ui-monospace, Consolas, monospace; }
+.rate-value { font-size: 16px; text-align: right; font-weight: 500; }
+.rate-trend { color: var(--text-tertiary); text-align: center; }
+
+/* ===== ASSETS & LIABILITIES ===== */
+.al-diff { text-align: center; margin-bottom: 22px; }
+.al-diff-label { font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
+.al-diff-value { font-size: 32px; font-weight: 500; }
+.al-diff-value.pos { color: var(--text-primary); }
+.al-diff-value .plus { color: var(--color-success); margin-right: 6px; }
+.al-diff-value .curr { font-size: 16px; color: var(--text-secondary); font-weight: 400; margin-left: 6px; }
+
+.al-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+.al-col { text-align: center; }
+.al-col-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+.al-col-value { font-size: 17px; font-weight: 500; margin-bottom: 14px; }
+.al-col-value.assets { color: var(--color-success); }
+.al-col-value.liab { color: var(--color-danger); }
+.al-col-value .curr { font-size: 12px; color: var(--text-secondary); margin-left: 3px; font-weight: 400; }
+
+.al-bar {
+  height: 140px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+}
+.al-bar.filled { background: var(--color-success-deep); }
+.al-bar.empty { border: 1.5px dashed var(--text-tertiary); }
+
+/* ===== Bottom nav ===== */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 390px;
+  background: var(--bg-page);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 8px 0 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.nav-item.active { color: var(--accent-blue); }
+.nav-icon { width: 22px; height: 22px; }
+
+/* Center "Payment" has a special ring */
+.nav-item.center .nav-icon-wrap {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -14px;
+  background: var(--bg-page);
+}
+.nav-item.center { color: var(--accent-blue); }
+.nav-item.center .nav-icon { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <!-- Fake status bar -->
+  <div class="status-bar">
+    <span>20:44</span>
+    <div class="sb-right">
+      <span>4G+</span>
+      <span>46%</span>
+    </div>
+  </div>
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="mail-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="2"/>
+        <path d="M3 7l9 6 9-6"/>
+      </svg>
+      <span class="mail-badge">5</span>
+    </div>
+    <div class="tb-logo"><span></span><span></span><span></span></div>
+    <button class="customize-btn">Customize</button>
+  </div>
+
+  <div class="divider thick"></div>
+
+  <!-- ============ ACCOUNTS ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Accounts</h2>
+    </div>
+    <div class="inner-card">
+      <div class="account-name">Kolesnikov Volodymyr</div>
+      <div class="iban">
+        <span class="em">SK05</span> <span class="em">1100</span> 0000 00<span class="em">29</span> 3258 4439
+      </div>
+      <div class="balance-row">
+        <div>
+          <div class="balance-label">Account balance</div>
+          <div class="balance-amount">3,71<span class="curr">EUR</span></div>
+        </div>
+        <svg class="mini-chart" viewBox="0 0 130 42" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="gG" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#00764E" stop-opacity="0.5"/>
+              <stop offset="100%" stop-color="#00764E" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M 0 28 L 18 16 L 36 23 L 55 11 L 75 22 L 95 5 L 115 14 L 130 3 L 130 42 L 0 42 Z" fill="url(#gG)"/>
+          <path d="M 0 28 L 18 16 L 36 23 L 55 11 L 75 22 L 95 5 L 115 14 L 130 3" fill="none" stroke="#00764E" stroke-width="1.5"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ CARDS ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Cards</h2>
+      <button class="action-link">List of cards</button>
+    </div>
+
+    <div class="card-visual-wrap">
+      <div class="card-visual primary">
+        <span class="card-visa">VISA</span>
+        <div class="card-chip"></div>
+        <div class="card-stripe"></div>
+      </div>
+      <div class="card-visual empty"></div>
+    </div>
+
+    <div class="card-dots">
+      <span class="dot active"></span>
+      <span class="dot"></span>
+    </div>
+
+    <div class="card-info-row">
+      <div>
+        <div class="card-holder">Volodymyr Kolesnikov</div>
+        <div class="card-number">4405 77** **** 2183</div>
+      </div>
+      <div class="card-balance-right">
+        <div class="card-balance-amount">3,71<span class="curr">EUR</span></div>
+        <div class="card-balance-sub">Disposable balance</div>
+      </div>
+    </div>
+
+    <div class="card-actions">
+      <div class="card-action">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/>
+          <path d="M3 4h3l2.5 12h11L22 7H6"/>
+          <text x="13" y="12" font-size="6" fill="currentColor" stroke="none">€</text>
+        </svg>
+        E-commerce
+      </div>
+      <div class="card-action">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2l2.4 7.2H22l-6 4.4 2.3 7.2L12 16.4 5.7 20.8l2.3-7.2L2 9.2h7.6z"/>
+        </svg>
+        Card benefits
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ SAVINGS ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Savings</h2>
+      <button class="action-link">List of savings</button>
+    </div>
+    <div class="savings-card">
+      <div class="savings-top">
+        <div class="savings-info">
+          <div class="s-name">Kolesnikov Volodymyr</div>
+          <div class="s-sub">to account: <span class="s-val">Kolesnikov Volodymyr</span></div>
+        </div>
+        <div class="savings-amount">270,00<span class="curr">EUR</span></div>
+      </div>
+      <div class="savings-hint">
+        <span class="info-icon">i</span>
+        <span>For successful saving we recommend to create a goal.</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ SPOLU (ТВОЯ СЕКЦИЯ) ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Spolu<span class="spolu-badge-new">NEW</span></h2>
+      <button class="action-link">See all</button>
+    </div>
+
+    <div class="spolu-room trip">
+      <div class="spolu-top">
+        <div>
+          <div class="spolu-name">Praha weekend</div>
+          <div class="spolu-sub">Trip · 3 members · 5 expenses</div>
+          <span class="pill ok">In balance</span>
+        </div>
+        <div class="spolu-balance">
+          <div class="spolu-amount">247,50<span class="curr">EUR</span></div>
+          <div class="spolu-sub" style="margin:4px 0 0;">Pool balance</div>
+        </div>
+      </div>
+      <div class="members-row">
+        <div class="avatars">
+          <div class="avatar a1">V</div>
+          <div class="avatar a2">K</div>
+          <div class="avatar a3">P</div>
+        </div>
+        <div class="members-meta">You owe 0,00 EUR</div>
+      </div>
+    </div>
+
+    <div class="spolu-room flat">
+      <div class="spolu-top">
+        <div>
+          <div class="spolu-name">Flatshare April</div>
+          <div class="spolu-sub">Monthly · 2 members · Rent + utilities</div>
+          <span class="pill owe">Owe 45,00 EUR</span>
+        </div>
+        <div class="spolu-balance">
+          <div class="spolu-amount">420,00<span class="curr">EUR</span></div>
+          <div class="spolu-sub" style="margin:4px 0 0;">Pool balance</div>
+        </div>
+      </div>
+      <div class="members-row">
+        <div class="avatars">
+          <div class="avatar a1">V</div>
+          <div class="avatar a4">J</div>
+        </div>
+        <div class="members-meta">Settle now ›</div>
+      </div>
+    </div>
+
+    <button class="add-room">
+      <div class="add-icon">+</div>
+      <span class="add-text">Create new Spolu room</span>
+    </button>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ QUICK PAY ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Quick pay</h2>
+      <button class="action-link">List of beneficiaries</button>
+    </div>
+    <div class="qp-row">
+      <div class="qp-item">
+        <div class="qp-avatar c1">KV</div>
+        <div class="qp-name">Kolesnikov Volodymyr</div>
+      </div>
+      <div class="qp-item">
+        <div class="qp-avatar c1">KV</div>
+        <div class="qp-name">Kolesnikov Volodymyr</div>
+      </div>
+      <div class="qp-item">
+        <div class="qp-avatar c2">KO</div>
+        <div class="qp-name">Kolomiets</div>
+      </div>
+      <div class="qp-item">
+        <div class="qp-avatar c3">MF</div>
+        <div class="qp-name">Majiteľ Fer...</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ SPENDING REPORT ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Spending report</h2>
+      <button class="action-link">Detail</button>
+    </div>
+
+    <div class="sp-difference">
+      <div class="sp-diff-label">Difference</div>
+      <div class="sp-diff-value neg"><span class="minus">—</span>19,84<span class="curr">EUR</span></div>
+    </div>
+
+    <div class="sp-ei-row">
+      <div class="sp-ei-col">
+        <div class="sp-ei-label">Expenses</div>
+        <div class="sp-ei-value exp">1 025,34<span class="curr">EUR</span></div>
+      </div>
+      <div class="divider-v"></div>
+      <div class="sp-ei-col">
+        <div class="sp-ei-label">Incomes</div>
+        <div class="sp-ei-value inc">1 005,50<span class="curr">EUR</span></div>
+      </div>
+    </div>
+
+    <div class="sp-main">
+      <div class="donut-wrap">
+        <svg viewBox="0 0 120 120" width="100%">
+          <!-- Donut chart segments -->
+          <!-- Основной серо-синий 60% -->
+          <circle r="42" cx="60" cy="60" fill="none"
+            stroke="#5A6B7A" stroke-width="22"
+            stroke-dasharray="158 264" stroke-dashoffset="0"
+            transform="rotate(-90 60 60)"/>
+          <!-- Оранжевый 17% -->
+          <circle r="42" cx="60" cy="60" fill="none"
+            stroke="#C94D17" stroke-width="22"
+            stroke-dasharray="45 264" stroke-dashoffset="-158"
+            transform="rotate(-90 60 60)"/>
+          <!-- Жёлтый 9% -->
+          <circle r="42" cx="60" cy="60" fill="none"
+            stroke="#C9B019" stroke-width="22"
+            stroke-dasharray="24 264" stroke-dashoffset="-203"
+            transform="rotate(-90 60 60)"/>
+          <!-- Синий 9% -->
+          <circle r="42" cx="60" cy="60" fill="none"
+            stroke="#025AA1" stroke-width="22"
+            stroke-dasharray="24 264" stroke-dashoffset="-227"
+            transform="rotate(-90 60 60)"/>
+          <!-- Голубой 5% -->
+          <circle r="42" cx="60" cy="60" fill="none"
+            stroke="#1E90D4" stroke-width="22"
+            stroke-dasharray="13 264" stroke-dashoffset="-251"
+            transform="rotate(-90 60 60)"/>
+
+          <!-- Percentage labels -->
+          <text x="85" y="65" fill="white" font-size="11" font-weight="500" text-anchor="middle">60%</text>
+          <text x="28" y="80" fill="white" font-size="10" font-weight="500" text-anchor="middle">17%</text>
+          <text x="28" y="55" fill="white" font-size="10" font-weight="500" text-anchor="middle">9%</text>
+          <text x="42" y="28" fill="white" font-size="10" font-weight="500" text-anchor="middle">9%</text>
+          <text x="68" y="24" fill="white" font-size="10" font-weight="500" text-anchor="middle">5%</text>
+        </svg>
+      </div>
+
+      <div class="donut-legend">
+        <div class="donut-item">
+          <div class="donut-dot grey">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h0"/></svg>
+          </div>
+          <div class="donut-label">Unclassified</div>
+        </div>
+        <div class="donut-item">
+          <div class="donut-dot orange">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l-2 4a2 2 0 0 0 2 3h14a2 2 0 0 0 2-3l-2-4M5 12V7a7 7 0 0 1 14 0v5M8 12h8"/></svg>
+          </div>
+          <div class="donut-label">Savings and inve…</div>
+        </div>
+        <div class="donut-item">
+          <div class="donut-dot yellow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M3 4h3l2.5 12h11L22 7H6"/></svg>
+          </div>
+          <div class="donut-label">Supermarket</div>
+        </div>
+        <div class="donut-item">
+          <div class="donut-dot blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M6 6l12 12M6 18L18 6"/></svg>
+          </div>
+          <div class="donut-label">Leisure time</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ LOANS ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Loans</h2>
+      <button class="action-link">Add product</button>
+    </div>
+    <div class="illus-card">
+      <div class="illus-img">
+        <div class="photo-stack">
+          <div class="photo p1"></div>
+          <div class="photo p2"></div>
+          <div class="photo p3"></div>
+        </div>
+      </div>
+      <div class="illus-text">Ask for a Loan and we will contact you with an offer.</div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ BRANCHES & ATMS ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Branches and ATMs</h2>
+      <button class="action-link">Show</button>
+    </div>
+    <div class="map-placeholder">
+      <svg class="map-svg" viewBox="0 0 200 90">
+        <!-- Silhouette of Slovakia approximation -->
+        <path d="M 20 35 Q 25 25, 40 25 L 60 22 Q 80 18, 100 25 L 130 22 Q 155 25, 175 35 Q 180 45, 175 55 L 160 65 Q 140 68, 120 60 L 95 65 Q 70 70, 50 65 L 30 60 Q 18 50, 20 35 Z"
+          fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.2"/>
+        <!-- Pins -->
+        <circle cx="55" cy="45" r="3" fill="#3390DD"/>
+        <path d="M 55 48 L 55 52" stroke="#3390DD" stroke-width="1.5"/>
+        <circle cx="75" cy="38" r="3" fill="#3390DD"/>
+        <path d="M 75 41 L 75 45" stroke="#3390DD" stroke-width="1.5"/>
+        <circle cx="100" cy="42" r="3" fill="#3390DD"/>
+        <path d="M 100 45 L 100 49" stroke="#3390DD" stroke-width="1.5"/>
+        <circle cx="145" cy="38" r="3" fill="#3390DD"/>
+        <path d="M 145 41 L 145 45" stroke="#3390DD" stroke-width="1.5"/>
+        <circle cx="165" cy="45" r="3" fill="#3390DD"/>
+        <path d="M 165 48 L 165 52" stroke="#3390DD" stroke-width="1.5"/>
+      </svg>
+      <span>Turn on location services.</span>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ EXCHANGE RATES ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Exchange rates</h2>
+      <button class="action-link">Detail</button>
+    </div>
+    <div class="rate-row">
+      <svg class="rate-flag" viewBox="0 0 28 20"><rect width="28" height="10" fill="#fff"/><rect y="10" width="28" height="10" fill="#D7141A"/><polygon points="0,0 14,10 0,20" fill="#11457E"/></svg>
+      <span class="rate-country">Czech Republic</span>
+      <span class="rate-code">CZK</span>
+      <span class="rate-value">24,2970</span>
+      <span class="rate-trend">—</span>
+    </div>
+    <div class="rate-row">
+      <svg class="rate-flag" viewBox="0 0 28 20">
+        <rect width="28" height="20" fill="#012169"/>
+        <path d="M0,0 L28,20 M28,0 L0,20" stroke="#fff" stroke-width="3"/>
+        <path d="M0,0 L28,20 M28,0 L0,20" stroke="#C8102E" stroke-width="1.5"/>
+        <path d="M14,0 V20 M0,10 H28" stroke="#fff" stroke-width="5"/>
+        <path d="M14,0 V20 M0,10 H28" stroke="#C8102E" stroke-width="3"/>
+      </svg>
+      <span class="rate-country">Great Britain</span>
+      <span class="rate-code">GBP</span>
+      <span class="rate-value">0,8716</span>
+      <span class="rate-trend">—</span>
+    </div>
+    <div class="rate-row">
+      <svg class="rate-flag" viewBox="0 0 28 20">
+        <rect width="28" height="20" fill="#fff"/>
+        <g fill="#B22234">
+          <rect y="0" width="28" height="1.54"/>
+          <rect y="3.08" width="28" height="1.54"/>
+          <rect y="6.15" width="28" height="1.54"/>
+          <rect y="9.23" width="28" height="1.54"/>
+          <rect y="12.31" width="28" height="1.54"/>
+          <rect y="15.38" width="28" height="1.54"/>
+          <rect y="18.46" width="28" height="1.54"/>
+        </g>
+        <rect width="12" height="11" fill="#3C3B6E"/>
+      </svg>
+      <span class="rate-country">USA</span>
+      <span class="rate-code">USD</span>
+      <span class="rate-value">1,1835</span>
+      <span class="rate-trend">—</span>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ DDS PENSION ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">DDS pension</h2>
+      <button class="action-link">Add product</button>
+    </div>
+    <div class="illus-card">
+      <div class="illus-img">
+        <div class="dds-logo">DDS</div>
+      </div>
+      <div class="illus-text">Open a DDS pension saving and secure a better pension.</div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ ASSETS & LIABILITIES ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Assets and Liabilities</h2>
+      <button class="action-link">Detail</button>
+    </div>
+    <div class="al-diff">
+      <div class="al-diff-label">Difference:</div>
+      <div class="al-diff-value pos"><span class="plus">+</span>273,71<span class="curr">EUR</span></div>
+    </div>
+    <div class="al-grid">
+      <div class="al-col">
+        <div class="al-col-label">Assets</div>
+        <div class="al-col-value assets">273,71<span class="curr">EUR</span></div>
+        <div class="al-bar filled">100 %</div>
+      </div>
+      <div class="al-col">
+        <div class="al-col-label">Liabilities</div>
+        <div class="al-col-value liab">0,00<span class="curr">EUR</span></div>
+        <div class="al-bar empty"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============ MUTUAL FUNDS ============ -->
+  <section class="section">
+    <div class="section-header">
+      <h2 class="section-title">Mutual funds</h2>
+      <button class="action-link">Add product</button>
+    </div>
+    <div class="illus-card">
+      <div class="illus-img">
+        <svg viewBox="0 0 90 70" width="90" height="70">
+          <!-- Chess pieces silhouettes -->
+          <g fill="#D8D8DC">
+            <path d="M 12 60 L 22 60 L 20 50 L 14 50 Z M 13 48 L 21 48 L 22 42 L 12 42 Z M 14 40 L 20 40 L 18 34 L 16 34 Z M 15 32 L 19 32 L 19 28 L 15 28 Z"/>
+          </g>
+          <g fill="#2A2A2E" stroke="#A5A5A9" stroke-width="0.5">
+            <path d="M 35 60 L 48 60 L 46 52 L 37 52 Z M 36 50 L 47 50 L 47 42 L 36 42 Z M 38 40 L 45 40 L 45 30 L 38 30 L 36 25 L 47 25 L 45 30 Z"/>
+          </g>
+          <g fill="#2A2A2E" stroke="#A5A5A9" stroke-width="0.5">
+            <path d="M 62 60 L 75 60 L 73 52 L 64 52 Z M 63 50 L 74 50 L 74 42 L 63 42 Z M 65 40 L 72 40 L 73 32 L 64 32 Z M 66 30 L 71 30 L 70 22 L 67 22 Z"/>
+          </g>
+        </svg>
+      </div>
+      <div class="illus-text">Make the right move for your savings and let them grow.</div>
+    </div>
+  </section>
+</div>
+
+<!-- ===== Bottom nav ===== -->
+<nav class="bottom-nav">
+  <div class="nav-item active">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>
+    </svg>
+    <span>Home</span>
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 10l-4 4 4 4"/><path d="M3 14h14"/><path d="M17 14l4-4-4-4"/><path d="M21 10H8"/>
+    </svg>
+    <span>Transactions</span>
+  </div>
+  <div class="nav-item center">
+    <div class="nav-icon-wrap">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="9" width="18" height="13" rx="2"/>
+        <path d="M12 3v11M7 8l5-5 5 5"/>
+      </svg>
+    </div>
+    <span>Payment</span>
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M3 4h3l2.5 12h11L22 7H6"/>
+    </svg>
+    <span>Offers</span>
+  </div>
+  <div class="nav-item">
+    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+      <path d="M3 7h18"/><path d="M3 12h18"/><path d="M3 17h18"/>
+    </svg>
+    <span>More</span>
+  </div>
+</nav>
+
+</body>
+</html>
